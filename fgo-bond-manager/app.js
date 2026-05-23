@@ -123,30 +123,30 @@ createApp({
         // 重複名の対応など（同じ名前ならIDが新しい方を優先したり、ID順にしたり）
         // ユーザーのセーブデータを読み込んでマージ
         const savedParties = localStorage.getItem('fgo_bond_manager_parties_v1');
-      if (savedParties) {
-        try {
-          parties.value = JSON.parse(savedParties);
-        } catch (e) {}
-      } else {
-        const savedSettings = localStorage.getItem('fgo_bond_manager_settings_v2');
-        if (savedSettings) {
+        if (savedParties) {
           try {
-            const parsed = JSON.parse(savedSettings);
-            const migrated = getDefaultParty('編成1');
-            Object.assign(migrated, parsed);
-            if (!migrated.partyCEs2) migrated.partyCEs2 = ['none', 'none', 'none', 'none', 'none'];
-            if (!migrated.isGrand) migrated.isGrand = [false, false, false, false, false];
-            if (!migrated.mashCost16) migrated.mashCost16 = [false, false, false, false, false];
-            if (!migrated.friendCEs) migrated.friendCEs = ['teatime', 'none'];
-            parties.value = [migrated];
-          } catch (e) { }
+            parties.value = JSON.parse(savedParties);
+          } catch (e) {}
+        } else {
+          const savedSettings = localStorage.getItem('fgo_bond_manager_settings_v2');
+          if (savedSettings) {
+            try {
+              const parsed = JSON.parse(savedSettings);
+              const migrated = getDefaultParty('編成1');
+              Object.assign(migrated, parsed);
+              if (!migrated.partyCEs2) migrated.partyCEs2 = ['none', 'none', 'none', 'none', 'none'];
+              if (!migrated.isGrand) migrated.isGrand = [false, false, false, false, false];
+              if (!migrated.mashCost16) migrated.mashCost16 = [false, false, false, false, false];
+              if (!migrated.friendCEs) migrated.friendCEs = ['teatime', 'none'];
+              parties.value = [migrated];
+            } catch (e) { }
+          }
         }
-      }
-      const savedIndex = localStorage.getItem('fgo_bond_manager_active_party');
-      if (savedIndex !== null) {
-        let idx = parseInt(savedIndex, 10);
-        if (idx >= 0 && idx < parties.value.length) activePartyIndex.value = idx;
-      }
+        const savedIndex = localStorage.getItem('fgo_bond_manager_active_party');
+        if (savedIndex !== null) {
+          const idx = parseInt(savedIndex, 10);
+          if (idx >= 0 && idx < parties.value.length) activePartyIndex.value = idx;
+        }
 
         // 旧セーブデータ（V2）からの引継ぎ、またはV3からの読み込み
         const savedUserDataV3 = localStorage.getItem('fgo_bond_manager_userdata_v3');
@@ -569,7 +569,7 @@ createApp({
       servants,
       availableTraits,
       classOptions,
-      settings,
+
       filter,
       filteredServants,
       ownedServantsList,
