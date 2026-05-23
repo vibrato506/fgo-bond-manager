@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FGO 絆管理システム</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700;900&family=Cinzel:wght@700&display=swap"
+    rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      background-color: #f3f4f6;
+      color: #1f2937;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+    .fgo-result-bg {
+      background: linear-gradient(180deg, #1a1510 0%, #0d0a08 100%);
+      border: 1px solid #cfa358;
+      box-shadow: inset 0 0 10px rgba(207, 163, 88, 0.2);
+    }
+
+    .fgo-number {
+      font-family: 'Cinzel', serif;
+      color: #ffd700;
+      text-shadow: 0 0 5px rgba(255, 215, 0, 0.5);
+    }
+
+    .fgo-bonus {
+      font-family: 'Cinzel', serif;
+      color: #eab308;
+    }
+
+    .fgo-next-label {
+      font-family: 'Cinzel', serif;
+      color: #fbbf24;
+      letter-spacing: 0.1em;
+    }
+
+    .fgo-next-value {
+      font-family: 'Cinzel', serif;
+      color: #fef08a;
+    }
+
+    [v-cloak] {
+      display: none;
+    }
+  </style>
+</head>
+
+<body class="antialiased min-h-screen flex flex-col">
+  <div id="app" v-cloak class="flex flex-col h-screen overflow-hidden">
+    <!-- Header -->
+    <header
+      class="bg-white border-b border-gray-200 px-6 py-3 flex justify-between items-center z-10 shrink-0 shadow-sm">
+      <div class="flex items-center gap-6">
+        <h1 class="text-xl font-bold text-gray-800">FGO 絆管理システム</h1>
+        <nav class="flex gap-1 ml-4">
+          <button @click="activeTab = 'management'"
+            :class="{'bg-blue-50 text-blue-700 font-bold': activeTab === 'management', 'text-gray-600 hover:bg-gray-50': activeTab !== 'management'}"
+            class="px-4 py-2 rounded-md text-sm transition-colors">
+            所持鯖管理
+          </button>
+          <button @click="activeTab = 'simulation'"
+            :class="{'bg-blue-50 text-blue-700 font-bold': activeTab === 'simulation', 'text-gray-600 hover:bg-gray-50': activeTab !== 'simulation'}"
+            class="px-4 py-2 rounded-md text-sm transition-colors">
+            編成シミュレーション
+          </button>
+        </nav>
+      </div>
+      <div class="flex gap-3">
+        <button @click="resetData"
+          class="px-4 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded text-sm font-medium transition-colors shadow-sm">
+          初期データにリセット
+        </button>
+        <button @click="saveData"
+          class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-medium transition-colors shadow-sm">
+          データを保存
+        </button>
+      </div>
+    </header>
+
+    <!-- TAB 1: 所持鯖管理 -->
+    <main v-if="activeTab === 'management'" class="flex-1 flex flex-col overflow-hidden bg-white">
+      <div class="p-4 border-b border-gray-200 shrink-0 bg-gray-50">
+        <div class="flex flex-wrap gap-4 items-end">
+          <div class="flex flex-col gap-1">
+            <span class="text-xs font-bold text-gray-500">所持状況</span>
+            <div class="inline-flex rounded-md shadow-sm" role="group">
+              <button @click="filter.possession = 'all'"
+                :class="filter.possession === 'all' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
+                class="px-3 py-1.5 text-sm font-medium border rounded-l-md focus:z-10 transition-colors">
+                すべて
+              </button>
+              <button @click="filter.possession = 'owned'"
+                :class="filter.possession === 'owned' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
+                class="px-3 py-1.5 text-sm font-medium border-t border-b border-r focus:z-10 transition-colors">
+                所持のみ
+              </button>
+              <button @click="filter.possession = 'unowned'"
+                :class="filter.possession === 'unowned' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
+                class="px-3 py-1.5 text-sm font-medium border-t border-b border-r rounded-r-md focus:z-10 transition-colors">
+                未所持
+              </button>
+            </div>
+          </div>
+          <div class="flex flex-col gap-1">
+            <span class="text-xs font-bold text-gray-500">レアリティ</span>
+            <select v-model="filter.rarity"
+              class="bg-white border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500 min-w-[100px]">
+              <option value="all">すべて</option>
+              <option value="5">★5 (SSR)</option>
+              <option value="4">★4 (SR)</option>
+              <option value="3">★3 (R)</option>
+              <option value="2">★2 (UC)</option>
+              <option value="1">★1 (C)</option>
+              <option value="0">★0</option>
+            </select>
+          </div>
+          <div class="flex flex-col gap-1">
+            <span class="text-xs font-bold text-gray-500">クラス</span>
+            <select v-model="filter.className"
+              class="bg-white border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500 min-w-[140px]">
+              <option v-for="opt in classOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+            </select>
+          </div>
+          <div class="flex flex-col gap-1">
+            <span class="text-xs font-bold text-gray-500">対象特性 (20%礼装)</span>
+            <select v-model="filter.trait"
+              class="bg-white border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500 min-w-[160px]">
+              <option value="all">すべて</option>
+              <option v-for="t in availableTraits" :key="t" :value="t">{{ t }}</option>
+            </select>
+          </div>
+          <div class="flex flex-col gap-1 flex-1 min-w-[200px]">
+            <span class="text-xs font-bold text-gray-500">名前検索</span>
+            <input type="text" v-model="filter.search" placeholder="サーヴァント名..."
+              class="w-full bg-white border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500" />
+          </div>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-auto custom-scrollbar relative">
+        <table class="w-full text-left border-collapse min-w-max">
+          <thead class="sticky top-0 z-10 bg-gray-100 shadow-sm">
+            <tr>
+              <th class="px-4 py-3 font-semibold text-sm text-gray-700 border-b border-gray-300 w-64">サーヴァント名</th>
+              <th class="px-4 py-3 font-semibold text-sm text-gray-700 border-b border-gray-300 w-24 text-center">所持
+              </th>
+              <th class="px-4 py-2 font-medium text-gray-600">現在絆Lv</th>
+              <th class="px-4 py-2 font-medium text-gray-600">ゲーム内表示next-exp</th>
+              <th class="px-4 py-2 font-medium text-gray-600">目標絆Lv</th>
+              <th class="px-4 py-2 font-medium text-gray-600">残り絆P (目標Lvまで)</th>
+              <th class="px-4 py-2 font-medium text-gray-600">保有特性</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200">
+            <tr v-for="(svt, index) in filteredServants" :key="index" class="hover:bg-blue-50/50 transition-colors"
+              :class="{'bg-gray-50 text-gray-400': !svt.owned}">
+              <td class="px-4 py-2 text-sm font-medium">
+                <div class="flex items-center gap-3">
+                  <img v-if="svt.iconUrl" :src="svt.iconUrl"
+                    class="w-10 h-10 rounded border border-gray-300 object-cover shadow-sm" />
+                  <div v-else
+                    class="w-10 h-10 rounded bg-gray-100 border border-gray-300 flex items-center justify-center text-[10px] text-gray-400 shadow-sm">
+                    No IMG</div>
+                  <span>{{ svt.name }}</span>
+                </div>
+              </td>
+              <td class="px-4 py-2 text-center">
+                <input type="checkbox" v-model="svt.owned"
+                  class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-5 w-5 cursor-pointer">
+              </td>
+              <td class="px-4 py-2">
+                <input v-if="svt.owned" type="number" v-model.number="svt.currentLv" min="0" max="15"
+                  class="w-20 bg-white border border-gray-300 rounded focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm px-2 py-1.5"
+                  placeholder="-" />
+                <span v-else class="text-gray-400 text-sm px-2">-</span>
+              </td>
+              <td class="px-4 py-2">
+                <input v-if="svt.owned" type="number" v-model.number="svt.nextExp" min="0"
+                  class="w-24 bg-white border border-gray-300 rounded focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm px-2 py-1.5"
+                  placeholder="空欄可" />
+                <span v-else class="text-gray-400 text-sm px-2">-</span>
+              </td>
+              <td class="px-4 py-2">
+                <input v-if="svt.owned" type="number" v-model.number="svt.targetLevel" min="1" max="15"
+                  class="w-20 bg-white border border-gray-300 rounded focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm px-2 py-1.5 font-bold text-blue-600" />
+                <span v-else class="text-gray-400 text-sm px-2">-</span>
+              </td>
+              <td class="px-4 py-2">
+                <span v-if="svt.owned && svt.currentLv !== null" class="font-mono text-sm px-2 font-bold text-gray-700">
+                  {{ calculateTargetRemainingP(svt) > 0 ? calculateTargetRemainingP(svt).toLocaleString() : '達成済' }}
+                </span>
+                <span v-else class="text-gray-400 text-sm px-2">-</span>
+              </td>
+              <td class="px-4 py-2 text-xs">
+                <div class="flex flex-wrap gap-1">
+                  <span v-for="t in getServantAllTraits(svt)" :key="t"
+                    class="px-2 py-1 rounded bg-gray-200 text-gray-700 border border-gray-300">
+                    {{ t }}
+                  </span>
+                  <span v-if="getServantAllTraits(svt).length === 0" class="text-gray-400">-</span>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="filteredServants.length === 0">
+              <td colspan="5" class="px-4 py-8 text-center text-gray-500">データが見つかりません。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
+
+    <!-- TAB 2: 編成シミュレーション -->
+    <div v-if="activeTab === 'simulation'" class="flex flex-col flex-1 overflow-hidden bg-gray-50">
+
+      <!-- 編成タブUI -->
+      <div class="bg-gray-100 border-b border-gray-200 px-4 pt-2 flex items-end overflow-x-auto shrink-0 custom-scrollbar">
+        <div v-for="(party, idx) in parties" :key="party.id" 
+          @click="activePartyIndex = idx"
+          class="px-4 py-2 mr-1 rounded-t-lg text-sm font-bold cursor-pointer border-t border-l border-r transition-colors flex items-center gap-2 group min-w-[120px] max-w-[200px]"
+          :class="activePartyIndex === idx ? 'bg-white text-blue-700 border-gray-200 shadow-[0_4px_0_0_white]' : 'bg-gray-200 text-gray-500 border-gray-300 hover:bg-gray-50'">
+          <input v-if="activePartyIndex === idx" v-model="party.name" @click.stop class="bg-transparent border-b border-blue-300 focus:border-blue-600 focus:outline-none w-full text-blue-700 font-bold truncate" />
+          <span v-else class="truncate w-full block">{{ party.name }}</span>
+          <button v-if="activePartyIndex === idx && parties.length > 1" @click.stop="removeParty(idx)" class="text-red-400 hover:text-red-600 rounded-full p-0.5 hover:bg-red-50 flex-shrink-0" title="編成を削除">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+          </button>
+        </div>
+        <button @click="addParty" class="px-3 py-2 mr-1 rounded-t-lg text-sm font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors flex items-center gap-1 shrink-0 mb-[1px]">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+          追加
+        </button>
+      </div>
+
+      <!-- 上部パネル: シミュレーション設定 -->
+      <div class="bg-white border-b border-gray-200 shadow-sm shrink-0 z-10">
+        <div class="px-6 py-5 max-w-7xl mx-auto flex flex-col gap-5">
+
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-6">
+              <h2 class="text-lg font-extrabold text-gray-800 flex items-center gap-2">
+                <span class="text-blue-500">⚙️</span> シミュレーション設定
+              </h2>
+              <div
+                class="flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-full border border-gray-200 shadow-sm">
+                <span class="text-xs font-extrabold text-gray-500">合計コスト</span>
+                <span class="text-sm font-extrabold font-mono"
+                  :class="totalPartyCost > 118 ? 'text-red-600' : 'text-gray-800'">
+                  {{ totalPartyCost }}<span class="text-xs text-gray-400 font-normal"> / 118</span>
+                </span>
+              </div>
+            </div>
+            <!-- ティーポットトグル -->
+            <label
+              class="relative inline-flex items-center cursor-pointer bg-purple-50 px-4 py-2 rounded-full border border-purple-200 hover:bg-purple-100 transition-colors shadow-sm">
+              <input type="checkbox" v-model="currentParty.teapotActive" class="sr-only peer">
+              <div
+                class="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[10px] after:left-[18px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600">
+              </div>
+              <span class="ml-3 text-sm font-extrabold text-purple-700">星見のティーポット (絆2倍)</span>
+            </label>
+          </div>
+
+          <div class="flex flex-wrap gap-6 items-end">
+            <!-- 基礎ポイント -->
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-bold text-gray-500">基礎絆ポイント</label>
+              <div class="flex gap-2 items-center">
+                <input type="number" v-model.number="currentParty.baseBond"
+                  class="w-28 bg-white border border-gray-300 rounded-md px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono shadow-sm" />
+                <button @click="currentParty.baseBond = 4748"
+                  class="px-3 py-2 text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-md hover:bg-indigo-100 transition-colors shadow-sm">戴冠戦100★★★
+                  (4748)</button>
+                <button @click="currentParty.baseBond = 3798"
+                  class="px-3 py-2 text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md hover:bg-emerald-100 transition-colors shadow-sm">オデコ90★★
+                  (3798)</button>
+              </div>
+            </div>
+
+            <!-- サポート礼装 -->
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-bold text-gray-500">サポート絆UP礼装 (最大2枠)</label>
+              <div class="flex gap-2">
+                <select v-model="currentParty.friendCEs[0]"
+                  class="w-44 bg-blue-50 border border-blue-200 text-blue-800 rounded-md px-3 py-2 text-sm font-bold focus:border-blue-500 shadow-sm cursor-pointer hover:bg-blue-100 transition-colors">
+                  <option v-for="opt in friendCEOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                </select>
+                <select v-model="currentParty.friendCEs[1]"
+                  class="w-44 bg-blue-50 border border-blue-200 text-blue-800 rounded-md px-3 py-2 text-sm font-bold focus:border-blue-500 shadow-sm cursor-pointer hover:bg-blue-100 transition-colors">
+                  <option v-for="opt in friendCEOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- その他加算 -->
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-bold text-gray-500">その他の加算 (%)</label>
+              <input type="number" v-model.number="currentParty.extraGlobalPercent"
+                class="w-24 bg-white border border-gray-300 rounded-md px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-sm font-mono"
+                placeholder="例: 15" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 下段：メイン編成エリア (横スクロール) -->
+      <main class="flex-1 overflow-x-auto overflow-y-auto p-6 custom-scrollbar relative">
+        <div class="flex justify-between items-center mb-6 min-w-max">
+          <h2 class="text-xl font-extrabold text-gray-800 flex items-center gap-2">
+            <span class="text-blue-600">⚔️</span> バトル編成・装備礼装 (自陣)
+          </h2>
+          <div class="bg-white border border-gray-200 rounded-lg p-1.5 shadow-sm flex items-center">
+            <span class="text-xs text-gray-500 font-bold mx-3">配置ボーナス一括設定:</span>
+            <div class="inline-flex rounded-md shadow-sm" role="group">
+              <button @click="applyBonusPreset('front')" type="button"
+                class="px-4 py-2 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-l-md hover:bg-blue-100 transition-colors">
+                フレンド前衛 (1.24/1.0倍)
+              </button>
+              <button @click="applyBonusPreset('back')" type="button"
+                class="px-4 py-2 text-xs font-bold text-gray-700 bg-gray-50 border border-l-0 border-gray-300 rounded-r-md hover:bg-gray-100 transition-colors">
+                フレンド後衛 (すべて1倍)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5枠の横並びカード -->
+        <div class="flex gap-4 min-w-max pb-8">
+          <div v-for="(slotName, index) in ['Slot 1', 'Slot 2', 'Slot 3', 'Slot 4', 'Slot 5']" :key="index"
+            class="flex-shrink-0 w-72 rounded-xl shadow-sm overflow-hidden flex flex-col transition-all duration-300"
+            :class="currentParty.isGrand && currentParty.isGrand[index] ? 'bg-blue-50/30 border-2 border-blue-500 shadow-blue-200' : 'bg-white border border-gray-200'">
+
+            <!-- カードヘッダ -->
+            <div class="px-4 py-3 border-b flex justify-between items-center"
+              :class="currentParty.isGrand && currentParty.isGrand[index] ? 'bg-blue-100 border-blue-200' : 'bg-gray-50 border-gray-200'">
+              <div class="flex items-center gap-2">
+                <h3
+                  class="font-bold text-gray-700 bg-white px-3 py-1 rounded-full text-sm shadow-sm border border-gray-200">
+                  Slot {{ index + 1 }}</h3>
+                <button @click="currentParty.isGrand[index] = !currentParty.isGrand[index]"
+                  class="text-[10px] font-extrabold px-2 py-0.5 rounded transition-colors border shadow-sm"
+                  :class="currentParty.isGrand[index] ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50'">
+                  グランド
+                </button>
+                <img v-if="currentParty.party[index] && getPartyServant(index) && getPartyServant(index).iconUrl"
+                  :src="getPartyServant(index).iconUrl"
+                  class="w-8 h-8 rounded-full border-2 border-white object-cover shadow-sm" />
+              </div>
+              <button v-if="currentParty.party[index]" @click="clearSlot(index)"
+                class="text-xs text-red-500 hover:text-red-700 font-bold bg-red-50 px-2 py-1 rounded">クリア</button>
+            </div>
+
+            <!-- 設定エリア -->
+            <div class="p-4 bg-gray-50/50 border-b border-gray-200 space-y-4 flex-1">
+              <div>
+                <label class="block text-xs font-bold text-gray-500 mb-1">サーヴァント選択</label>
+                <select v-model="currentParty.party[index]"
+                  class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-semibold text-gray-800 shadow-sm truncate">
+                  <option :value="null">未選択</option>
+                  <option v-for="svt in ownedServantsList" :key="svt.id" :value="svt.id">
+                    {{ svt.name }} ({{ classOptions.find(c => c.value === svt.className)?.label || svt.className }})
+                  </option>
+                </select>
+                <div v-if="currentParty.party[index] === 800100"
+                  class="mt-2 flex items-center gap-2 bg-gray-100 p-2 rounded-md border border-gray-200">
+                  <span class="text-[10px] font-bold text-gray-600">マシュのコスト</span>
+                  <button @click="currentParty.mashCost16[index] = !currentParty.mashCost16[index]"
+                    class="text-[10px] font-extrabold px-2 py-0.5 rounded transition-colors border shadow-sm"
+                    :class="currentParty.mashCost16[index] ? 'bg-purple-600 text-white border-purple-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'">
+                    {{ currentParty.mashCost16[index] ? '16' : '0' }}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-gray-500 mb-1">装備礼装 (自枠)</label>
+                <div class="flex flex-col gap-2">
+                  <select v-model="currentParty.partyCEs[index]"
+                    class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-gray-700 shadow-sm truncate">
+                    <option v-for="opt in partyCEOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                  </select>
+                  <select v-if="currentParty.isGrand && currentParty.isGrand[index]" v-model="currentParty.partyCEs2[index]"
+                    class="w-full bg-blue-50 border border-blue-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-blue-800 shadow-sm truncate">
+                    <option v-for="opt in partyCEOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-gray-500 mb-1">配置ボーナス (B)</label>
+                <select v-model.number="currentParty.partyBonus[index]"
+                  class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-mono shadow-sm text-gray-700">
+                  <option :value="1.00">1.00倍</option>
+                  <option :value="1.24">1.24倍 (前衛)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 下部：リザルトエリア（ゲーム画面風） -->
+            <div class="fgo-result-bg p-4 flex flex-col items-center justify-center relative min-h-[140px]">
+              <template v-if="getPartyServant(index)">
+                <!-- ボーナス%表示バッジ -->
+                <div v-if="getSlotBonusPercent(index) > 0" class="absolute top-2 right-2 z-20">
+                  <div class="bg-yellow-400 text-yellow-900 text-xs font-extrabold px-1.5 py-0.5 rounded shadow-sm">
+                    +{{ getSlotBonusPercent(index) }}%
+                  </div>
+                </div>
+                <div class="text-center w-full">
+                  <!-- 獲得絆P (Base + Bonus) -->
+                  <div class="text-2xl fgo-number mb-0.5">
+                    <template v-if="calculateTargetRemainingP(getPartyServant(index)) > 0">
+                      + {{ calculateSlotPointsPerRun(index).base.toLocaleString() }}
+                      <span class="text-sm fgo-bonus">(+{{ calculateSlotPointsPerRun(index).bonus.toLocaleString() }})</span>
+                    </template>
+                    <template v-else>
+                      -
+                    </template>
+                  </div>
+                  <!-- 計 -->
+                  <div class="text-lg font-bold text-yellow-400 mb-2">
+                    <template v-if="calculateTargetRemainingP(getPartyServant(index)) > 0">
+                      計 {{ calculateSlotPointsPerRun(index).total.toLocaleString() }}
+                    </template>
+                  </div>
+                  <!-- NEXT絆P -->
+                  <div class="text-[11px] text-gray-300 font-bold bg-black/30 px-2 py-1 rounded-md inline-block">
+                    <span class="fgo-next-label mr-1 text-yellow-600">NEXT</span>
+                    目標:<span class="fgo-next-value mx-1">{{ calculateTargetRemainingP(getPartyServant(index)) > 0 ? calculateTargetRemainingP(getPartyServant(index)).toLocaleString() : '-' }}</span>, 
+                    次lv:<span class="fgo-next-value ml-1">{{ calculateNextLvRemainingP(getPartyServant(index)) > 0 ? calculateNextLvRemainingP(getPartyServant(index)).toLocaleString() : '-' }}</span>
+                  </div>
+                  <!-- 周回数 -->
+                  <div class="mt-3 pt-3 border-t border-yellow-800/50 flex justify-between items-center w-full px-2">
+                    <span class="text-xs text-yellow-600 font-bold">目標まで</span>
+                    <span class="text-xl text-yellow-400 font-bold font-mono">
+                      {{ calculateTargetRemainingP(getPartyServant(index)) > 0 ? calculateSlotRunsNeeded(index) : '-' }}
+                      <span class="text-sm">周</span>
+                    </span>
+                  </div>
+                  
+                  <!-- ボーナス内訳 -->
+                  <div v-if="getSlotBonusDetails(index).length > 0" class="mt-3 pt-3 border-t border-yellow-800/50 w-full text-left">
+                    <div class="text-[10px] text-yellow-600 font-bold mb-1 px-1">▼ ボーナス内訳</div>
+                    <ul class="text-[10px] text-yellow-100/70 space-y-0.5 px-2">
+                      <li v-for="(detail, i) in getSlotBonusDetails(index)" :key="i" class="flex justify-between items-center">
+                        <span>{{ detail.split(':')[0] }}</span>
+                        <span class="font-bold text-yellow-400/90">{{ detail.split(':')[1] }}</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </template>
+              <template v-else>
+                <div class="text-yellow-800/50 font-bold text-sm text-center">
+                  NO SERVANT
+                </div>
+              </template>
+            </div>
+
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+  </div>
+
+  <script src="bondReqs.js"></script>
+  <script src="app.js"></script>
+</body>
+
+</html>
