@@ -15,9 +15,29 @@ createApp({
     const activeTab = ref('simulation');
     const servants = ref([]);
     
-    // 固定の10特性リスト
+    const classIdMap = {
+      saber: 1,
+      lancer: 3,
+      archer: 2,
+      rider: 4,
+      caster: 5,
+      assassin: 6,
+      berserker: 7,
+      shielder: 8,
+      ruler: 9,
+      alterEgo: 10,
+      avenger: 11,
+      moonCancer: 23,
+      foreigner: 25,
+      pretender: 28,
+      beast: 33,
+      ex1: 1004,
+      ex2: 1005
+    };
+
+    // 固定の11特性リスト
     const availableTraits = ref([
-      'キャスター', 'ライダー', 'ケモノ科', '今を生きる人類', 
+      'セイバー', 'キャスター', 'ライダー', 'ケモノ科', '今を生きる人類', 
       '秩序かつ善', '霊衣を持つ者', '秩序かつ女性', '星または悪', 
       '混沌かつ七騎士', '中立'
     ]);
@@ -45,18 +65,119 @@ createApp({
       possession: 'all', 
       search: '',
       rarity: 'all',
-      className: 'all',
+      classNames: [], // 複数選択（OR条件）のために配列へ変更
       trait: 'all'
+    });
+
+    const toggleClassFilter = (cls) => {
+      const idx = filter.value.classNames.indexOf(cls);
+      if (idx === -1) {
+        filter.value.classNames.push(cls);
+      } else {
+        filter.value.classNames.splice(idx, 1);
+      }
+    };
+
+    const filterExpanded = ref(true);
+
+    const ownedCEs = ref({
+      teatime: true,
+      lunchtime: true,
+      kyokuten: true,
+      portrait: true,
+      traitCEs: []
+    });
+
+    const getDefaultBattleTemplate = (name = '新規バトル', baseBond = 855, ap = 40) => ({
+      id: Date.now() + Math.random(),
+      name,
+      baseBond,
+      ap,
+      useTeapot: false,
+      bonusPreset: 'front', // 'front', 'back', 'none'
+      grandSlot: null, // null, 1, 2, 3, 4, 5 (1-indexed)
+      friendDoubleCE: false, // true or false
+      constraints: {
+        allowedClasses: [],
+        fixedSlots: [null, null, null, null, null],
+        fixedCEs: [null, null, null, null, null]
+      },
+      notes: ''
+    });
+
+    const defaultCoronation = getDefaultBattleTemplate('狂戴冠戦', 4748, 40);
+    defaultCoronation.grandSlot = 1;
+    defaultCoronation.friendDoubleCE = true;
+    defaultCoronation.constraints.allowedClasses = ['berserker'];
+
+    const battleTemplates = ref([
+      defaultCoronation
+    ]);
+
+    const selectedTemplateId = ref('all');
+    const scheduleResults = ref(null);
+    const scheduleCheckpoints = ref({});
+
+    const traitCEOptions = computed(() => {
+      return availableTraits.value.map(t => ({ value: t, label: `20%礼装 (${t})` }));
     });
 
     onMounted(async () => {
       await fetchAtlasData();
       isLoading.value = false;
+
+      // ローカルストレージからの読み込みとマイグレーション
+      const savedTemplates = localStorage.getItem('fgo_bond_manager_templates');
+      if (savedTemplates) {
+        try {
+          const parsed = JSON.parse(savedTemplates);
+          if (Array.isArray(parsed)) {
+            battleTemplates.value = parsed.map(t => {
+              const def = getDefaultBattleTemplate(t.name, t.baseBond, t.ap);
+              return {
+                ...def,
+                ...t,
+                constraints: {
+                  ...def.constraints,
+                  ...(t.constraints || {})
+                }
+              };
+            });
+          }
+        } catch (e) {}
+      }
+      const savedOwnedCEs = localStorage.getItem('fgo_bond_manager_owned_ces');
+      if (savedOwnedCEs) {
+        try {
+          const parsed = JSON.parse(savedOwnedCEs);
+          ownedCEs.value = {
+            teatime: parsed.teatime !== undefined ? parsed.teatime : true,
+            lunchtime: parsed.lunchtime !== undefined ? parsed.lunchtime : true,
+            kyokuten: parsed.kyokuten !== undefined ? parsed.kyokuten : true,
+            portrait: parsed.portrait !== undefined ? parsed.portrait : true,
+            traitCEs: parsed.traitCEs || []
+          };
+        } catch (e) {}
+      }
+      const savedSelTmpl = localStorage.getItem('fgo_bond_manager_selected_template');
+      if (savedSelTmpl) {
+        selectedTemplateId.value = savedSelTmpl;
+      }
+      const savedCheckpoints = localStorage.getItem('fgo_bond_manager_checkpoints');
+      if (savedCheckpoints) {
+        try {
+          scheduleCheckpoints.value = JSON.parse(savedCheckpoints);
+        } catch (e) {}
+      }
     });
 
     watch(servants, () => { saveToLocalStorage(); }, { deep: true });
     watch(parties, () => { saveToLocalStorage(); }, { deep: true });
     watch(activePartyIndex, () => { saveToLocalStorage(); });
+    watch(battleTemplates, () => { saveToLocalStorage(); }, { deep: true });
+    watch(ownedCEs, () => { saveToLocalStorage(); }, { deep: true });
+    watch(selectedTemplateId, () => { saveToLocalStorage(); });
+    watch(scheduleCheckpoints, () => { saveToLocalStorage(); }, { deep: true });
 
     const saveToLocalStorage = () => {
       // ユーザー固有の入力データだけを抽出して保存 (IDベースで保存するのが理想だが、既存のセーブデータ引継ぎのため名前にする)
@@ -72,6 +193,10 @@ createApp({
       localStorage.setItem('fgo_bond_manager_userdata_v3', JSON.stringify(userData));
       localStorage.setItem('fgo_bond_manager_parties_v1', JSON.stringify(parties.value));
       localStorage.setItem('fgo_bond_manager_active_party', activePartyIndex.value.toString());
+      localStorage.setItem('fgo_bond_manager_templates', JSON.stringify(battleTemplates.value));
+      localStorage.setItem('fgo_bond_manager_owned_ces', JSON.stringify(ownedCEs.value));
+      localStorage.setItem('fgo_bond_manager_selected_template', selectedTemplateId.value);
+      localStorage.setItem('fgo_bond_manager_checkpoints', JSON.stringify(scheduleCheckpoints.value));
     };
 
     const fetchAtlasData = async () => {
@@ -102,7 +227,8 @@ createApp({
             nextExp: null
           };
 
-          // 10特性の動的判定
+          // 11特性の動的判定
+          svt['セイバー'] = s.className === 'saber';
           svt['キャスター'] = s.className === 'caster';
           svt['ライダー'] = s.className === 'rider';
           svt['ケモノ科'] = hasTrait(s, 'havingAnimalsCharacteristics');
@@ -125,7 +251,22 @@ createApp({
         const savedParties = localStorage.getItem('fgo_bond_manager_parties_v1');
         if (savedParties) {
           try {
-            parties.value = JSON.parse(savedParties);
+            const parsed = JSON.parse(savedParties);
+            if (Array.isArray(parsed)) {
+              parties.value = parsed.map(p => {
+                const def = getDefaultParty(p.name, p.id);
+                return {
+                  ...def,
+                  ...p,
+                  party: p.party || def.party,
+                  partyCEs: p.partyCEs || def.partyCEs,
+                  partyCEs2: p.partyCEs2 || def.partyCEs2,
+                  isGrand: p.isGrand || def.isGrand,
+                  mashCost16: p.mashCost16 || def.mashCost16,
+                  partyBonus: p.partyBonus || def.partyBonus
+                };
+              });
+            }
           } catch (e) {}
         } else {
           const savedSettings = localStorage.getItem('fgo_bond_manager_settings_v2');
@@ -192,6 +333,37 @@ createApp({
       alert('データを保存しました。次回アクセス時もこの状態から復元されます。');
     };
 
+    const addBattleTemplate = () => {
+      battleTemplates.value.push(getDefaultBattleTemplate());
+    };
+
+    const removeBattleTemplate = (idx) => {
+      if (battleTemplates.value.length <= 1) {
+        alert('最低1つのバトルは残す必要があります。');
+        return;
+      }
+      battleTemplates.value.splice(idx, 1);
+    };
+
+    const toggleCheckpoint = (phase) => {
+      saveToLocalStorage();
+      alert(`Phase ${phase.id} の進捗を反映しました！`);
+    };
+
+    const exportScheduleJSON = () => {
+      if (!scheduleResults.value) return;
+      const dataStr = JSON.stringify(scheduleResults.value, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `fgo_schedule_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    };
+
     const resetData = () => {
       if (confirm('初期データにリセットしますか？入力した所持状況や絆Lvなどはすべて消去されます。')) {
         servants.value.forEach(s => {
@@ -216,6 +388,19 @@ createApp({
       const newName = `編成${parties.value.length + 1}`;
       parties.value.push(getDefaultParty(newName, newId));
       activePartyIndex.value = parties.value.length - 1;
+      saveToLocalStorage();
+    };
+
+    const copyParty = (index) => {
+      const sourceParty = parties.value[index];
+      if (!sourceParty) return;
+      const newId = Date.now();
+      const newName = `${sourceParty.name}のコピー`;
+      const cloned = JSON.parse(JSON.stringify(sourceParty));
+      cloned.id = newId;
+      cloned.name = newName;
+      parties.value.splice(index + 1, 0, cloned);
+      activePartyIndex.value = index + 1;
       saveToLocalStorage();
     };
 
@@ -512,8 +697,18 @@ createApp({
         result = result.filter(s => s.rarity === parseInt(filter.value.rarity));
       }
       
-      if (filter.value.className !== 'all') {
-        result = result.filter(s => s.className === filter.value.className);
+      if (filter.value.classNames && filter.value.classNames.length > 0) {
+        const allowedClasses = new Set();
+        filter.value.classNames.forEach(cls => {
+          if (cls === 'ex1') {
+            ['ruler', 'avenger', 'shielder', 'mooncancer'].forEach(c => allowedClasses.add(c));
+          } else if (cls === 'ex2') {
+            ['alterego', 'foreigner', 'pretender', 'beast'].forEach(c => allowedClasses.add(c));
+          } else {
+            allowedClasses.add(cls.toLowerCase());
+          }
+        });
+        result = result.filter(s => allowedClasses.has(s.className.toLowerCase()));
       }
 
       if (filter.value.trait !== 'all') {
@@ -527,6 +722,23 @@ createApp({
       return result;
     });
 
+    const getServantCost = (svt, isMash16 = false) => {
+      if (!svt) return 0;
+      if (svt.id === 800100) { // マシュ
+        return isMash16 ? 16 : 0;
+      }
+      if (svt.id === 1100100) { // アンリマユ
+        return 4;
+      }
+      if (svt.rarity === 5) return 16;
+      if (svt.rarity === 4) return 12;
+      if (svt.rarity === 3) return 7;
+      if (svt.rarity === 2) return 4;
+      if (svt.rarity === 1) return 3;
+      if (svt.rarity === 0) return 4;
+      return 0;
+    };
+
     const getCECost = (ce) => {
       if (!ce || ce === 'none') return 0;
       if (ce === 'portrait') return 5;
@@ -534,41 +746,175 @@ createApp({
       return 12; // 20% CEs, Teatime, Lunchtime are 5-star (12 cost)
     };
 
+    const formatCEName = (ce) => {
+      if (!ce || ce === 'none') return 'なし';
+      if (ce === 'teatime') return 'カルデア・ティータイム (+5%/15%)';
+      if (ce === 'lunchtime') return 'カルデア・ランチタイム (+10%)';
+      if (ce === 'kyokuten') return '英霊極点 (+2%)';
+      if (ce === 'portrait') return '英霊肖像 (+50)';
+      if (ce.startsWith('trait_')) {
+        const trait = ce.replace('trait_', '');
+        return `20%礼装 (${trait})`;
+      }
+      return ce;
+    };
+
     const totalPartyCost = computed(() => {
       let total = 0;
       for (let i = 0; i < 5; i++) {
         const svt = getPartyServant(i);
         if (svt) {
-          if (svt.id === 800100) {
-            total += (currentParty.value.mashCost16 && currentParty.value.mashCost16[i]) ? 16 : 0;
-          } else if (svt.id === 1100100) { // Angra Mainyu
-            total += 4;
-          } else {
-            if (svt.rarity === 5) total += 16;
-            else if (svt.rarity === 4) total += 12;
-            else if (svt.rarity === 3) total += 7;
-            else if (svt.rarity === 2) total += 4;
-            else if (svt.rarity === 1) total += 3;
-            else if (svt.rarity === 0) total += 4;
-          }
+          total += getServantCost(svt, currentParty.value.mashCost16 && currentParty.value.mashCost16[i]);
         }
-        const ce1 = currentParty.value.partyCEs[i];
-        total += getCECost(ce1);
+        const ce = currentParty.value.partyCEs[i];
+        total += getCECost(ce);
       }
       return total;
     });
 
+    const runLocalRuleBasedGeneration = () => {
+      if (typeof window.generateSchedule !== 'function') {
+        alert("周回チャート生成エンジンがロードされていません。再読み込みしてください。");
+        return;
+      }
+      window.generateSchedule({
+        servants: servants.value,
+        availableTraits: availableTraits.value,
+        battleTemplates: battleTemplates.value,
+        selectedTemplateId: selectedTemplateId.value,
+        ownedCEs: ownedCEs.value,
+        scheduleResults: scheduleResults,
+        BOND_REQ_11_TO_15,
+        BOND_REQ_1_TO_10,
+        calculateTargetRemainingP,
+        getServantCost,
+        getCECost,
+        formatCEName
+      });
+    };
+
+    const calculateSlotPointsForParty = (partyObj, slotIdx) => {
+      const idOrName = partyObj.party[slotIdx];
+      if (!idOrName) return 0;
+      const svt = servants.value.find(s => s.id === idOrName || s.name === idOrName);
+      if (!svt) return 0;
+
+      const base = partyObj.baseBond || 0;
+      const B = partyObj.partyBonus[slotIdx] || 1.0;
+      const C = Math.floor(base * B);
+
+      let percent = 0;
+      
+      // 15Lvボーナス（そのパーティ内でのLv15の人数をカウント）
+      let lv15Count = 0;
+      for (let i = 0; i < 5; i++) {
+        const pId = partyObj.party[i];
+        if (pId) {
+          const pSvt = servants.value.find(s => s.id === pId || s.name === pId);
+          if (pSvt && pSvt.currentLv >= 15) lv15Count++;
+        }
+      }
+      const lv15Percent = lv15Count * 25;
+
+      // フレンド礼装
+      partyObj.friendCEs.forEach(ce => {
+        if (ce === 'teatime') percent += 15;
+        else if (ce === 'lunchtime') percent += 10;
+        else if (ce === 'kyokuten') percent += 2;
+        else if (ce && ce.startsWith('trait_')) {
+          const trait = ce.replace('trait_', '');
+          if (svt[trait]) percent += 20;
+        }
+      });
+
+      // 自陣礼装
+      partyObj.partyCEs.forEach((ce, i) => {
+        if (!partyObj.party[i]) return;
+        if (ce === 'teatime') percent += 5;
+        else if (ce === 'lunchtime') percent += 10;
+        else if (ce === 'kyokuten') percent += 2;
+        else if (ce && ce.startsWith('trait_')) {
+          const trait = ce.replace('trait_', '');
+          if (svt[trait]) percent += 20;
+        }
+      });
+
+      // Grand枠
+      if (partyObj.isGrand) {
+        partyObj.isGrand.forEach((isG, i) => {
+          if (!partyObj.party[i]) return;
+          if (isG) {
+            const ce2 = partyObj.partyCEs2[i];
+            if (ce2 === 'teatime') percent += 5;
+            else if (ce2 === 'lunchtime') percent += 10;
+            else if (ce2 === 'kyokuten') percent += 2;
+            else if (ce2 && ce2.startsWith('trait_')) {
+              const trait = ce2.replace('trait_', '');
+              if (svt[trait]) percent += 20;
+            }
+          }
+        });
+      }
+
+      percent += (partyObj.extraGlobalPercent || 0);
+      percent += lv15Percent;
+
+      // フラットボーナス
+      let flatBonus = 0;
+      partyObj.friendCEs.forEach(ce => { if (ce === 'portrait') flatBonus += 50; });
+      partyObj.partyCEs.forEach((ce, i) => {
+        if (partyObj.party[i] && ce === 'portrait') flatBonus += 50;
+      });
+      if (partyObj.isGrand) {
+        partyObj.isGrand.forEach((isG, i) => {
+          if (partyObj.party[i] && isG && partyObj.partyCEs2[i] === 'portrait') flatBonus += 50;
+        });
+      }
+
+      const Y = Math.floor(C * (percent / 100));
+      let total = C + Y + flatBonus;
+      if (partyObj.teapotActive) total *= 2;
+
+      return total;
+    };
+
+    const calculatePartyTotalBond = (partyObj) => {
+      if (!partyObj) return 0;
+      let total = 0;
+      for (let i = 0; i < 5; i++) {
+        total += calculateSlotPointsForParty(partyObj, i);
+      }
+      return total;
+    };
+
     return {
+      calculatePartyTotalBond,
       isLoading,
       activeTab,
       parties,
       activePartyIndex,
       currentParty,
       addParty,
+      copyParty,
       removeParty,
       servants,
       availableTraits,
       classOptions,
+      classIdMap,
+      filterExpanded,
+      ownedCEs,
+      battleTemplates,
+      selectedTemplateId,
+      scheduleResults,
+      scheduleCheckpoints,
+      traitCEOptions,
+      addBattleTemplate,
+      removeBattleTemplate,
+      exportScheduleJSON,
+      toggleCheckpoint,
+      runLocalRuleBasedGeneration,
+      toggleClassFilter,
+      formatCEName,
 
       filter,
       filteredServants,

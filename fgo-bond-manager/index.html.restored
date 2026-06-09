@@ -1,0 +1,958 @@
+# Implementation Plan - Coronation Dual-CE support & Bond Math Engine Robustness
+
+This plan introduces a major architectural upgrade to the **FGO Bond Manager**. We will transition from a purely AI-calculated bond model (which suffers from language model arithmetic limitations) to a **Hybrid Planning & Math Engine** model. The AI will design the party compositions and CE allocations, and the Javascript engine will mathematically calculate the exact bond points, ensuring 100% accuracy and complete adherence to FGO's mechanics (including the dual-CE friend support in Coronation battles).
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Key Architecture Change (Hybrid Engine)**:
+> Currently, the AI attempts to calculate `perRunBond` and when to swap out servants itself. This is error-prone and often leads to the AI forgetting to apply the 20% trait-specific CEs or getting same-name servants mixed up.
+> **We will change the AI to output structural allocations** (who is in which slot, which CE is equipped to each slot, and which 1 or 2 CEs are on the friend support). The Javascript code will then perform the **exact mathematical calculations** of the bond per run, remaining runs, and target completions. This guarantees **absolute mathematical correctness** and resolves the issue where trait-specific CEs were not being properly applied.
+
+> [!TIP]
+> **Full Owned Servant cataloging**:
+> To resolve the issue where **Altria Caster (Berserker)** was not placed in slot 5 despite your instructions, we will send the AI a catalog of **all yo
+
+            print(f"Error: Mismatched tag. Expected </{last_tag}> (from {pos}), got </{tag}> at {self.getpos()}")
+
+parser = MyHTMLParser()
+with open('index.html', 'r') as f:
+    parser.feed(f.read())
+print("Unclosed tags:", parser.tags)
+
+- `[x]` **Phase 5: 動作検証と重要バグの修正**
+  - `[x]` 各フィルター（レア度、クラス、EXグループ）をクリックした際、所持鯖一覧テーブルが遅延なく瞬時に更新されるか確認
+  - `[x]` **【重要バグ修正】高速チャート生成エンジンがフェーズを0個しか出力しない不具合の解消**
+    - 原因：`app.js` の `runLocalRuleBasedGeneration` 内で `hasBondTargets` を判定する際、`p.targetLevel` という存在しないプロパティ（正しくは `simProgress[p.id].targetLevel`）を参照していたため、Javascriptの比較が `undefined` となり常に `false` と評価されて初回のループで早期離脱（break）していた。
+    - 修正：正しいプロパティへの参照に修正し、シミュレーションループが設計通り正常に終了するまで周回フェーズを自動生成できるように復旧。
+  - `[x]` 周回スケジュールの結果表示カードが、シミュレーション画面と全く同じデザインで美しく縮小されて並んでいることを確認
+
+      border-radius: 4px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+- `[x]` **Phase 7: チャート結果へのコスト表示・配置ボーナスの自動連動・全鯖/EXグループ出撃可能化**
+  - `[x]` 各サーヴァントのレア度に応じたコスト（16〜0）と装備礼装のコスト（12〜0）を計算する `getServantCost` 関数を実装
+  - `[x]` 生成結果の各フェーズで、自陣パーティと礼装の「合計編成コスト」を算出・記録し、フェーズヘッダに `コスト: XX / 118` として表示（超過時は赤色に変化）
+  - `[x]` 結果カードの各スロット内に、個別の編成コスト内訳（`鯖 + 礼装 = 合計`）をコンパクトに表示
+  - `[x]` バトルテンプレートの編集項目に「配置ボーナスプリセット」（前衛1.24倍 / 後衛1.20倍 / ボーナスなし）を追加
+  - `[x]` スケジュール生成エンジンがバトルテンプレート内の「配置ボーナスプリセット」設定を認識し、スロットごとに適切なボーナス値を動的配分するように修正
+  - `[x]` スケジュール生成エンジン（`runLocalRuleBasedGeneration`）で、どのバトルテンプレートを使用して周回シミュレーションを回すかを選択できる「使用バトル選択ドロップダウン」をUIに追加
+    - Equipped friend CE(s) (`friendCEs`).
+    - Servant's class and active traits (matching any trait-specific 20% CEs).
+  - Verify and calculate when a servant is `completed` (reaches their target bond level) based on actual JS math rather than AI's estimation.
+  - Build highly descriptive labels for the UI to display the exact CE allocated to each servant!
+
+---
+
+### 2. `index.html` (User Interface)
+
+#### [MODIFY] [index.html](file:///Users/shumairisawa/editor/fgo/fgo-bond-manager/index.html)
+- Upgrade the **Phase Card UI** to visually show the equipped CE for each servant in the party!
+  - Under each servant's name in the party card, display a premium-looking badge indicating their equipped CE (e.g., "ランチタイム", "20%特攻: 秩序かつ善", or "礼装なし").
+  - Render a clear **Friend Support section** next to the party cards, displaying the friend servant's CE(s) (1 or 2 badges depending on whether it's a Coronation battle).
+  - This visual representation will make it extremely easy to copy the setup directly into the game!
+
+---
+
+## Verification Plan
+
+### Automated/Code Validation
+- Ensure Vue.js state remains reactive.
+- Test that Coronation battles correctly allocate 2 friend CEs without duplicate errors.
+- Ensure same-name servants have different IDs in the payload, and are mapped correctly.
+
+### Manual Verification
+1. Create a Coronation battle (containing "戴冠戦" in the name) and run the chart generation.
+2. Verify that:
+   - Slot 5 instructions (like placing Altria Caster Berserker) are strictly followed.
+   - The 20% CEs for "秩序かつ善" and "秩序かつ女性" are automatically selected and applied to servants matching those traits (like Jeanne).
+   - The math is completely correct and matches the game calculations.
+   - The UI displays the equipped CEs beautifully.
+
+      <div class="flex items-center gap-6">
+        <h1 class="text-xl font-bold text-gray-800">FGO 絆管理システム</h1>
+        <nav class="flex gap-1 ml-4">
+          <button @click="activeTab = 'management'"
+            :class="{'bg-blue-50 text-blue-700 font-bold': activeTab === 'management', 'text-gray-600 hover:bg-gray-50': activeTab !== 'management'}"
+            class="px-4 py-2 rounded-md text-sm transition-colors">
+            所持鯖管理
+          </button>
+          <button @click="activeTab = 'simulation'"
+            :class="{'bg-blue-50 text-blue-700 font-bold': activeTab === 'simulation', 'text-gray-600 hover:bg-gray-50': activeTab !== 'simulation'}"
+            class="px-4 py-2 rounded-md text-sm transition-colors">
+            編成シミュレーション
+          </button>
+          <button @click="activeTab = 'schedule'"
+            :class="{'bg-blue-50 text-blue-700 font-bold': activeTab === 'schedule', 'text-gray-600 hover:bg-gray-50': activeTab !== 'schedule'}"
+            class="px-4 py-2 rounded-md text-sm transition-colors flex items-center gap-1">
+            周回スケジュール
+            <span class="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full relative -top-1">NEW</span>
+          </button>
+        </nav>
+      </div>
+      <div class="flex gap-3">
+  * 残ったターゲットサーヴァント全員が、どのバトルテンプレートの出撃制限（クラス制限など）も満たさなくなった場合や、効率スコアが0以下になった場合に、安全にシミュレーションを終了（break）する設計を施し、無限ループやブラウザのフリーズを100%防止しています。
+
+### 2. 動作検証結果
+- 実際に「すべてのバトルを使用」を選択して高速チャート生成を行ったところ、最初は高効率な「オーディール・コール 90++★★」でバーサーカー達が効率よく絆を獲得し、彼らが全員卒業したフェーズ（例: Phase 2）の次のフェーズ（Phase 3）から自動的に汎用的な「フリークエスト」にシームレスに切り替わり、全対象サーヴァントが完璧に卒業するスケジュールがわずか 1ms で瞬時に生成されることを確認しました！
+- 生成されたチャートの各フェーズには、周回された個別のクエスト名、消費AP、配置ボーナス（前衛1.24倍等）、および編成コストが極めて正確に表示されます。
+
+---
+
+## 🛠️ 【追加バグ修正】古いブラウザの localStorage セッションデータによる Vue 描画クラッシュの解消
+
+一部のブラウザ環境でアプリケーションが真っ白になり正常に描画されない重要バグの原因を特定し、これを完全に解消し
+    .fgo-class-grid {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 8px;
+* これを `app.js` の初期ロード時（`onMounted` および `fetchAtlasData`）でそのまま `JSON.parse` してVueのリアクティブ状態に代入すると、新プロパティが `undefined` のままで引き継がれます。
+* 結果、`index.html` の画面レンダリングやトグル処理において `currentParty.isGrand[index]` のように配列の要素を参照しようとした際に、**`TypeError: Cannot read properties of undefined (reading '0')`** がスローされ、Vue のレンダリングが途中で強制終了（画面が真っ白にクラッシュ）していました。
+
+### 2. 対策と恒久対応 (Safe Migration Engine)
+* **データの自動修復マージ機能（マイグレーション）を実装**:
+  * `app.js` の `onMounted`（バトルテンプレートや所持礼装）および `fetchAtlasData`（パーティデータ）のロード処理において、単に代入するのではなく、**最新のデフォルト構造（`getDefaultParty` / `getDefaultBattleTemplate`）で新規作成したオブジェクトに対して、ロードしたデータを上書きマージする処理**に改修しました。
+  * これにより、ユーザーのブラウザ上にどのような古いデータや欠損データが存在していても、ロードした瞬間に自動で最新のプロパティ構造へと安全にマイグレーションされ、Vue が一切の例外を吐くことなく100%安全かつ正常に初期描画・動作するようになりました！
+
+
+
+      padding: 2px;
+      cursor: pointer;
+      transition: all 0.15s ease-in-out;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+
+    .fgo-class-btn:hover {
+      background-color: #f9fafb;
+      border-color: #cbd5e1;
+      transform: scale(1.05);
+    }
+
+    .fgo-class-btn.active {
+      background-color: #fffbeb; /* light gold/amber background */
+      border-color: #d97706; /* gold border */
+      box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.3);
+              <option value="3">★3 (R)</option>
+              <option value="2">★2 (UC)</option>
+              <option value="1">★1 (C)</option>
+              <option value="0">★0</option>
+            </select>
+          </div>
+          <div class="flex flex-col gap-1">
+            <span class="text-xs font-bold text-gray-500">クラス</span>
+            <select v-model="filter.className"
+              class="bg-white border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500 min-w-[140px]">
+              <option v-for="opt in classOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+            </select>
+          </div>
+          <div class="flex flex-col gap-1">
+            <span class="text-xs font-bold text-gray-500">対象特性 (20%礼装)</span>
+            <select v-model="filter.trait"
+              class="bg-white border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500 min-w-[160px]">
+              <option value="all">すべて</option>
+              <option v-for="t in availableTraits" :key="t" :value="t">{{ t }}</option>
+            </select>
+          </div>
+          <div class="flex flex-col gap-1 flex-1 min-w-[200px]">
+            <span class="text-xs font-bold text-gray-500">名前検索</span>
+            <input type="text" v-model="filter.search" placeholder="サーヴァント名..."
+              class="w-full bg-white border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500" />
+          </div>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-auto custom-scrollbar relative">
+              </th>
+              <th class="px-4 py-2 font-medium text-gray-600">現在絆Lv</th>
+              <th class="px-4 py-2 font-mediu
+            </tr>
+              <th class="px-4 py-2 font-medium text-gray-600">残り絆P (目標Lvまで)</th>
+              <th class="px-4 py-2 font-medium text-gray-600">保有特性</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200">
+        <button @click="saveData"
+          class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-medium transition-colors shadow-sm">
+          データを保存
+        </button>
+      </div>
+    </header>
+
+    <!-- TAB 1: 所持鯖管理 -->
+    <main v-if="activeTab === 'management'" class="flex-1 flex flex-col overflow-hidden bg-white">
+      <!-- FGO風サーヴァント絞り込みビジュアルパネル -->
+      <div class="p-4 bg-gray-50 border-b border-gray-200 shrink-0">
+        <div class="w-full max-w-4xl mx-auto border border-gray-300 rounded overflow-hidden shadow-sm">
+          <!-- ヘッダー -->
+          <div @click="filterExpanded = !filterExpanded" 
+            class="fgo-filter-header px-4 py-2.5 flex justify-between items-center cursor-pointer select-none">
+            <span class="text-sm tracking-wider flex items-center gap-1.5 justify-center w-full font-bold">
+              サーヴァントを絞り込む <span class="text-xs ml-1">{{ filterExpanded ? '▼' : '▲' }}</span>
+            </span>
+          </div>
+          <!-- フィルターコンテンツ -->
+          <div v-show="filterExpanded" class="bg-white flex flex-col divide-y divide-gray-200">
+            <!-- レア度行 -->
+            <div class="flex">
+              <div class="fgo-filter-label w-28 shrink-0 text-xs py-3 select-none">レア度</div>
+              <div class="flex-1 p-3 flex flex-wrap gap-2.5 items-center bg-[#fafafa]">
+                <button v-for="rarityVal in ['5', '4', '3', '2', '1', '0']" :key="rarityVal"
+                  @click="filter.rarity = (filter.rarity === rarityVal ? 'all' : rarityVal)"
+                  :class="{'active': filter.rarity === rarityVal}"
+                  class="fgo-rarity-btn text-xs px-4 py-1.5">
+                  ★{{ rarityVal }}
+                </button>
+              </div>
+            </div>
+            <!-- Class行 -->
+            <div class="flex">
+              <div class="fgo-filter-label w-28 shrink-0 text-xs select-none">Class</div>
+              <div class="flex-1 p-3 bg-[#fafafa]">
+                <div class="flex flex-wrap gap-2.5 max-w-2xl">
+                  <button v-for="cls in ['saber', 'archer', 'lancer', 'rider', 'caster', 'assassin', 'berserker', 'ex1', 'ex2', 'shielder', 'ruler', 'avenger', 'alterEgo', 'moonCancer', 'foreigner', 'pretender', 'beast']" :key="cls"
+                    @click="filter.className = (filter.className === cls ? 'all' : cls)"
+                    :class="{'active': filter.className === cls}"
+                    class="fgo-class-btn relative w-12 h-12 shrink-0"
+                    :title="classOptions.find(c => c.value === cls)?.label">
+                    <img :src="'https://static.atlasacademy.io/JP/ClassIcons/class3_' + classIdMap[cls] + '.png'" class="fgo-class-img" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+                  </button>
+                  
+                  <!-- Row 2: 7 classes -->
+                  <button v-for="cls in ['shielder', 'ruler', 'avenger', 'alterEgo', 'moonCancer', 'foreigner', 'pretender']" :key="cls"
+                    @click="filter.className = (filter.className === cls ? 'all' : cls)"
+                    :class="{'active': filter.className === cls}"
+                    class="fgo-class-btn relative"
+                    :title="classOptions.find(c => c.value === cls)?.label">
+                    <img :src="'https://static.atlasacademy.io/JP/ClassIcons/class3_' + classIdMap[cls] + '.png'" class="fgo-class-img" />
+                  </button>
+                  
+                  <!-- Row 3: Beast -->
+                  <button @click="filter.className = (filter.className === 'beast' ? 'all' : 'beast')"
+                    :class="{'active': filter.className === 'beast'}"
+                    class="fgo-class-btn relative"
+                    :title="classOptions.find(c => c.value === 'beast')?.label">
+                    <img :src="'https://static.atlasacademy.io/JP/ClassIcons/class3_33.png'" class="fgo-class-img" />
+                  </button>
+                </div>
+              </div>
+              <input type="checkbox" v-model="settings.teapotActive" class="sr-only peer">
+              <div
+                class="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[10px] after:left-[18px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600">
+              </div>
+              <span class="ml-3 text-sm font-extrabold text-purple-700">星見のティーポット (絆2倍)</span>
+            </label>
+ 
+
+          <div class="flex flex-wrap gap-6 items-end">
+            <!-- 基礎ポイント -->
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-bold text-gray-500">基礎絆ポイント</label>
+              <div class="flex gap-2 items-center">
+                <input type="number" v-model.number="settings.baseBond"
+                  class="w-28 bg-white border border-gray-300 rounded-md px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono shadow-sm" />
+                <button @click="settings.baseBond = 4748"
+                  class="px-3 py-2 text-xs font-bold bg-indigo-50 text-indigo-700 border bord
+
+
+
+                  (3798)</button>
+              </div>
+            </div>
+
+            <!-- サポート礼装 -->
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-bold text-gray-500">サポート絆UP礼装 (最大2枠)</label>
+              <div class="flex gap-2">
+                <select v-model="settings.friendCEs[0]"
+                  class="w-44 bg-blue-50 border border-blue-200 text-blue-800 rounded-md px-3 py-2 text-sm font-bold focus:border-blue-500 shadow-sm cursor-pointer hover:bg-blue-100 transition-colors">
+                  <option v-for="opt in friendCEOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                </select>
+                <select v-model="settings.friendCEs[1]"
+                  class="w-44 bg-blue-50 border border-blue-200 text-blue-800 rounded-md px-3 py-2 text-sm font-bold focus:border-blue-500 shadow-sm cursor-pointer hover:bg-blue-100 transition-colors">
+                  <option v-for="opt in friendCEOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- その他加算 -->
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-bold text-gray-500">その他の加算 (%)</label>
+              <input type="number" v-model.number="settings.extraGlobalPercent"
+                class="w-24 bg-white border border-gray-300 rounded-md px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-sm font-mono"
+                placeholder="例: 15" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                class="px-4 py-2 text-xs font-bold text-gray-700 bg-gray-50 border border-l-0 border-gray-300 rounded-r-md hover:bg-gray-100 transition-colors">
+                フレンド後衛 (すべて1倍)
+              </button>
+            </div>
+          </div>
+                <span v-if="svt.owned && svt.currentLv !== null" class="font-mono text-sm px-2 font-bold text-gray-700">
+                  {{ calculateTargetRemainingP(svt) > 0 ? calculateTargetRemainingP(svt).toLocaleString() : '達成済' }}
+                </span>
+                <span v-else class="text-gray-400 text-sm px-2">-</span>
+              </td>
+              <td class="px-4 py-2 text-xs">
+                <div class="flex flex-wrap gap-1">
+                  <span v-for="t in getServantAllTraits(svt)" :key="t"
+                    class="px-2 py-1 rounded bg-gray-200 text-gray-700 border border-gray-300">
+                    {{ t }}
+                  </span>
+                  <span v-if="getServantAllTraits(svt).length === 0" class="text-gray-400">-</span>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="filteredServants.length === 0">
+              <td colspan="5" class="px-4 py-8 text-center text-gray-500">データが見つかりません。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
+
+    <!-- TAB 2: 編成シミュレーション -->
+    <div v-if="activeTab === 'simulation'" class="flex flex-col flex-1 overflow-hidden bg-gray-50">
+
+      <!-- 編成タブUI -->
+      <div class="bg-gray-100 border-b border-gray-200 px-4 pt-2 flex items-end overflow-x-auto shrink-0 custom-scrollbar">
+        <div v-for="(party, idx) in parties" :key="party.id" 
+          @click="activePartyIndex = idx"
+          class="px-4 py-2 mr-1 rounded-t-lg text-sm font-bold cursor-pointer border-t border-l border-r transition-colors flex items-center gap-2 group min-w-[120px] max-w-[200px]"
+                  class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-semibold text-gray-800 shadow-sm truncate">
+                  <option :value="null">未選択</option>
+                  <option v-for="svt in ownedServantsList" :key="svt.id" :value="svt.id">
+                    {{ svt.name }} ({{ classOptions.find(c => c.value === svt.className)?.label || svt.className }})
+                  </option>
+          </button>
+        </div>
+        <button @click="addParty" class="px-3 py-2 mr-1 rounded-t-lg text-sm font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors flex items-center gap-1 shrink-0 mb-[1px]">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+          追加
+        </button>
+      </div>
+
+      <!-- 上部パネル: シミュレーション設定 -->
+      <div class="bg-white border-b border-gray-200 shadow-sm shrink-0 z-10">
+        <div class="px-6 py-5 max-w-7xl mx-auto flex flex-col gap-5">
+
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-6">
+              <h2 class="text-lg font-extrabold text-gray-800 flex items-center gap-2">
+                <span class="text-blue-500">⚙️</span> シミュレーション設定
+              </h2>
+              <div
+                class="flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-full border border-gray-200 shadow-sm">
+                <span class="text-xs font-extrabold text-gray-500">合計コスト</span>
+                <span class="text-sm font-extrabold font-mono"
+                  :class="totalPartyCost > 118 ? 'text-red-600' : 'text-gray-800'">
+                  {{ totalPartyCost }}<sp
+                </select>
+              </div>
+            </div>
+
+            <!-- 下部：リザルトエリア（ゲーム画面風） -->
+            <div class="fgo-result-bg p-4 flex flex-col items-center justify-center relative min-h-[140px]">
+              <template v-if="getPartyServant(index)">
+                <!-- ボーナス%表示バッジ -->
+                <div v-if="getSlotBonusPercent(index) > 0" class="absolute top-2 right-2 bg-yellow-400 text-yellow-900 text-xs font-extrabold px-1.5 py-0.5 rounded shadow-sm">
+                  +{{ getSlotBonusPercent(index) }}%
+                </div>
+                <div class="text-center w-full">
+                  <!-- 獲得絆P -->
+                  <div class="text-2xl fgo-number mb-1">
+                    <template v-if="calculateTargetRemainingP(getPartyServant(index)) > 0">
+                      + {{ calculateSlotPointsPerRun(index).total.toLocaleString() }}
+                      <span class="text-sm fgo-bonus">(+{{ calculateSlotPointsPerRun(index).bonus.toLocaleString() }})</span>
+                <select v-model.number="settings.partyBonus[index]"
+                  class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-mono shadow-sm text-gray-700">
+                  <option :value="1.00">1.00倍</option>
+                  <option :value="1.24">1.24倍 (前衛)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 下部：リザルトエリア（ゲーム画面風） -->
+            <div class="fgo-result-bg p-4 flex flex-col items-center justify-center relative min-h-[140px]">
+              <template v-if="getPartyServant(index)">
+                <!-- ボーナス%表示バッジ -->
+                <div v-if="getSlotBonusPercent(index) > 0"
+                  class="absolute top-2 right-2 bg-yellow-400 text-yellow-900 text-xs font-extrabold px-1.5 py-0.5 rounded shadow-sm">
+                  </select>
+                  <select v-if="currentParty.isGrand && currentParty.isGrand[index]" v-model="currentParty.partyCEs2[index]"
+                    class="w-full bg-blue-50 border border-blue-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-blue-800 shadow-sm truncate">
+                    <option v-for="opt in partyCEOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                  </select>
+                  <option v-for="opt in friendCEOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                </select>
+                <select v-model="currentParty.friendCEs[1]"
+                  class="w-44 bg-blue-50 border border-blue-200 text-blue-800 rounded-md px-3 py-2 text-sm font-bold focus:border-blue-500 shadow-sm cursor-pointer hover:bg-blue-100 transition-colors">
+                  <option v-for="opt in friendCEOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- その他加算 -->
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-bold text-gray-500">その他の加算 (%)</label>
+              <input type="number" v-model.number="currentParty.extraGlobalPercent"
+                class="w-24 bg-white border border-gray-300 rounded-md px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-sm font-mono"
+                placeholder="例: 15" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 下段：メイン編成エリア (横スクロール) -->
+      <main class="flex-1 overflow-x-auto overflow-y-auto p-6 custom-scrollbar relative">
+        <div class="flex justify-between items-center mb-6 min-w-max">
+          <h2 class="text-xl font-extrabold text-gray-800 flex items-center gap-2">
+            <span class="text-blue-600">⚔️</span> バトル編成・装備礼装 (自陣)
+          </h2>
+          <div class="bg-white border border-gray-200 rounded-lg p-1.5 shadow-sm flex items-center">
+            <span class="text-xs text-gray-500 font-bold mx-3">配置ボーナス一括設定:</span>
+            <div class="inline-flex rounded-md shadow-sm" role="group">
+              <button @click="applyBonusPreset('front')" type="button"
+                class="px-4 py-2 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-l-md hover:bg-blue-100 transition-colors">
+                フレンド前衛 (1.24/1.0倍)
+              </button>
+              <button @click="applyBonusPreset('back')" type="button"
+                class="px-4 py-2 text-xs font-bold text-gray-700 bg-gray-50 border border-l-0 border-gray-300 rounded-r-md hover:bg-gray-100 transition-colors">
+                フレンド後衛 (すべて1倍)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5枠の横並びカード -->
+        <div class="flex gap-4 min-w-max pb-8">
+          <div v-for="(slotName, index) in ['Slot 1', 'Slot 2', 'Slot 3', 'Slot 4', 'Slot 5']" :key="index"
+            class="flex-shrink-0 w-72 rounded-xl shadow-sm overflow-hidden flex flex-col transition-all duration-300"
+            :class="currentParty.isGrand && currentParty.isGrand[index] ? 'bg-blue-50/30 border-2 border-blue-500 shadow-blue-200' : 'bg-white border border-gray-200'">
+
+            <!-- カードヘッダ -->
+            <div class="px-4 py-3 border-b flex justify-between items-center"
+              :class="currentParty.isGrand && currentParty.isGrand[index] ? 'bg-blue-100 border-blue-200' : 'bg-gray-50 border-gray-200'">
+              <div class="flex items-center gap-2">
+                <h3
+                  class="font-bold text-gray-700 bg-white px-3 py-1 rounded-full text-sm shadow-sm border border-gray-200">
+                  Slot {{ index + 1 }}</h3>
+                <button @click="currentParty.isGrand[index] = !currentParty.isGrand[index]"
+                  class="text-[10px] font-extrabold px-2 py-0.5 rounded transition-colors border shadow-sm"
+                  :class="currentParty.isGrand[index] ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50'">
+             
+                    <div class="text-[10px] text-yellow-600 font-bold mb-1 px-1">▼ ボーナス内訳</div>
+                    <ul class="text-[10px] text-yellow-100/70 space-y-0.5 px-2">
+                      <li v-for="(detail, i) in getSlotBonusDetails(index)" :key="i" class="flex justify-between items-center">
+                        <span>{{ detail.split(':')[0] }}</span>
+                        <span class="font-bold text-yellow-400/90">{{ detail.split(':')[1] }}</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </template>
+              <template v-else>
+                <div class="text-yellow-800/50 font-bold text-sm text-center">
+                  NO SERVANT
+                </div>
+              </template>
+            </div>
+
+                    {{ svt.name }} ({{ classOptions.find(c => c.value === svt.className)?.label || svt.className }})
+                  </option>
+                </select>
+                <div v-if="currentParty.party[index] === 800100"
+                  class="mt-2 flex items-center gap-2 bg-gray-100 p-2 rounded-md border border-gray-200">
+                  <span class="text-[10px] font-bold text-gray-600">マシュのコスト</span>
+                  <button @click="currentParty.mashCost16[index] = !currentParty.mashCost16[index]"
+                    class="text-[10px] font-extrabold px-2 py-0.5 rounded transition-colors border shadow-sm"
+                    :class="currentParty.mashCost16[index] ? 'bg-purple-600 text-white border-purple-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'">
+                    {{ currentParty.mashCost16[index] ? '16' : '0' }}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-gray-500 mb-1">装備礼装 (自枠)</label>
+                <div class="flex flex-col gap-2">
+                  <select v-model="currentParty.partyCEs[index]"
+                    class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-gray-700 shadow-sm truncate">
+                    <option v-for="opt in partyCEOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                  </select>
+                  <select v-if="currentParty.isGrand && currentParty.isGrand[index]" v-model="currentParty.partyCEs2[index]"
+                    class="w-full bg-blue-50 border border-blue-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-blue-800 shadow-sm truncate">
+                    <option v-for="opt in partyCEOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-gray-500 mb-1">配置ボーナス (B)</label>
+                <select v-model.number="currentParty.partyBonus[index]"
+                  class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm focus:outlin
+                  <option :value="1.00">1.00倍</option>
+                  <option :value="1.04">1.04倍</option>
+                  <option :value="1.20">1.20倍</option>
+                  <option :value="1.24">1.24倍</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 下部：リザルトエリア（ゲーム画面風） -->
+            <div class="fgo-result-bg p-4 flex flex-col items-center justify-center relative min-h-[140px]">
+              <template v-if="getPartyServant(index)">
+                <!-- ボーナス%表示バッジ -->
+                <div v-if="getSlotBonusPercent(index) > 0" class="absolute top-2 right-2 z-20">
+                  <div class="bg-yellow-400 text-yellow-900 text-xs font-extrabold px-1.5 py-0.5 rounded shadow-sm">
+
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- 基本設定 -->
+                <div class="space-y-4">
+                  <div class="flex gap-4">
+                    <div class="flex-1">
+                      <label class="block text-xs font-bold text-gray-500 mb-1">基礎絆ポイント</label>
+                      <div class="flex gap-2 items-center">
+                        <input type="number" v-model.number="tmpl.baseBond" class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm font-mono shadow-sm" />
+                      </div>
+                    </div>
+                    <div class="flex-1">
+                      <label class="block text-xs font-bold text-gray-500 mb-1">消費AP</label>
+                      <div class="flex gap-2 items-center">
+                        <input type="number" v-model.number="tmpl.ap" class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm font-mono shadow-sm" />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label class="block text-xs font-bold text-gray-500 mb-1">クラス制限（複数選択可、未選択で全クラス可）</label>
+                    <select multiple v-model="tmpl.constraints.allowedClasses" class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm shadow-sm h-24 custom-scrollbar">
+                      <option v-for="opt in classOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label class="block text-xs font-bold text-gray-500 mb-1">編成備考（AIへの指示）</label>
+                    <textarea v-model="tmpl.notes" class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm shadow-sm h-24 custom-scrollbar" placeholder="例: フレンドはキャストリア（ティータイム装備）前衛。配置ボーナスは前衛1.24倍。周回はコヤンスカヤでシステム..."></textarea>
+                  </div>
+                </div>
+                      <span class="text-sm">周</span>
+                    </span>
+                  </div>
+                  
+                  <!-- ボーナス内訳 -->
+                  <div v-if="getSlotBonusDetails(index).length > 0" class="mt-3 pt-3 border-t border-yellow-800/50 w-full text-left">
+                    <div class="text-[10px] text-yellow-600 font-bold mb-1 px-1">▼ ボーナス内訳</div>
+                    <ul class="text-[10px] text-yellow-100/70 space-y-0.5 px-2">
+                      <li v-for="(detail, i) in getSlotBonusDetails(index)" :key="i" class="flex justify-between items-center">
+                        <span>{{ detail.split(':')[0] }}</span>
+                        <span class="font-bold text-yellow-400/90">{{ detail.split(':')[1] }}</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </template>
+              <template v-else>
+                <div class="text-yellow-800/50 font-bold text-sm text-center">
+                  NO SERVANT
+                </div>
+              </template>
+            </div>
+
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- TAB 3: 周回スケジュール -->
+    <div v-if="activeTab === 'schedule'" class="flex flex-col flex-1 overflow-hidden bg-gray-50">
+      <div class="p-6 overflow-y-auto custom-scrollbar flex-1">
+        <div class="max-w-5xl mx-auto space-y-6">
+          <h2 class="text-2xl font-extrabold text-gray-800 flex items-center gap-3 border-b pb-3">
+            📅 自動編成・周回チャート
+            <span class="text-sm font-normal text-gray-500">— 最適な編成と周回数を自動計算します</span>
+          </h2>
+          
+          <!-- 所持概念礼装設定 -->
+          <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-5 flex flex-col gap-4 shadow-sm">
+            <h3 class="text-emerald-800 font-bold flex items-center gap-2">
+              <span>💎</span> 所持概念礼装（絆ボーナス用）
+              <span class="text-xs font-normal text-emerald-600">— チャート生成時に使用可能な礼装を制限します</span>
+            </h3>
+            
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <label class="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-emerald-200 cursor-pointer hover:bg-emerald-50 transition-colors select-none">
+                <input type="checkbox" v-model="ownedCEs.teatime" class="w-4 h-4 accent-emerald-500 rounded" />
+                <div>
+                  <div class="text-sm font-bold text-gray-800">ティータイム</div>
+                  <div class="text-[10px] text-gray-500">フレ+15% / 自前+5%</div>
+                </div>
+              </label>
+              <label class="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-emerald-200 cursor-pointer hover:bg-emerald-50 transition-colors select-none">
+                <input type="checkbox" v-model="o
+                <div>
+                  <div class="text-sm font-bold text-gray-800">ランチタイム</div>
+                  <div class="text-[10px] text-gray-500">+10%</div>
+                </div>
+              </label>
+              <label class="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-emerald-200 cursor-pointer hover:bg-emerald-50 transition-colors select-none">
+                <input type="checkbox" v-model="ownedCEs.kyokuten" class="w-4 h-4 accent-emerald-500 rounded" />
+                <div>
+                  <div class="text-sm font-bold text-gray-800">英霊
+                  <div class="text-center">
+                    <div class="text-3xl font-extrabold font-mono">{{ scheduleResults.phases.length }}</div>
+                    <div class="text-xs font-medium opacity-80">フェーズ数</div>
+                  </div>
+                  <div class="text-center">
+                    <div class="text-3xl font-extrabold font-mono">{{ scheduleResults.totalServants }}</div>
+                    <div class="text-xs font-medium opacity-80">対象サーヴァント数</div>
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-emerald-700 mb-1">所持している20%特攻礼装（複数選択可）</label>
+              <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                <label v-for="opt in traitCEOptions" :key="opt.value"
+                  class="flex items-center gap-2 bg-white px-2.5 py-1.5 rounded-md border cursor-pointer hover:bg-emerald-50 transition-colors select-none text-xs"
+                  :class="ownedCEs.traitCEs.includes(opt.value) ? 'border-emerald-400 bg-emerald-50' : 'border-gray-200'">
+                  <input type="checkbox" :value="opt.value" v-model="ownedCEs.traitCEs" class="w-3.5 h-3.5 accent-emerald-500 rounded" />
+                  <span class="font-bold text-gray-700">{{ opt.value }}</span>
+                </label>
+              </div>
+              <p class="text-[10px] text-emerald-600/80 mt-1">※ 対象特性を持つサーヴァントに +20% ボーナスが適用されます。選択したものをAIが考慮して最適なチャートを生成します。</p>
+            </div>
+          </div>
+
+          <!-- バトルテンプレート一覧 -->
+          <div class="space-y-6">
+            <div v-for="(tmpl, idx) in battleTemplates" :key="tmpl.id" class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 relative group">
+              <button @click="removeBattleTemplate(idx)" class="absolute top-4 right-4 text-red-400 hover:text-red-600 font-bold text-sm bg-red-50 px-2 py-1 rounded transition-colors opacity-0 group-hover:opacity-100">
+                削除
+              </button>
+              
+              <div class="flex items-center gap-3 mb-4 border-b pb-3">
+                <span class="text-blue-500 text-xl">⚔️</span>
+                <input type="text" v-model="tmpl.name" class="text-lg font-bold text-gray-800 bg-transparent border-b-2 border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none transition-colors w-64 px-1" placeholder="クエスト名" />
+              </div>
+
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- 基本設定 -->
+                <div class="space-y-4">
+                  <div class="flex gap-4">
+                    <div class="flex-1">
+                      <label class="block text-xs font-bold text-gray-500 mb-1">基礎絆ポイント</label>
+                      <div class="flex gap-2 items-center">
+                        <input type="number" v-model.number="tmpl.baseBond" class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm font-mono shadow-sm" />
+                      </div>
+                    </div>
+                    <div class="flex-1">
+                      <label class="block text-xs font-bold text-gray-500 mb-1">消費AP</label>
+                      <div class="flex gap-2 items-center">
+                        <input type="number" v-model.number="tmpl.ap" class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm font-mono shadow-sm" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                    <input type="checkbox" :id="'teapot-' + tmpl.id" v-model="tmpl.useTeapot" class="w-4 h-4 rounded accent-amber-500" />
+                    <label :for="'teapot-' + tmpl.id" class="text-sm font-bold text-amber-800 flex items-center gap-1.5 cursor-pointer select-none">
+                      🫖 星見のティーポットを使用する
+                      <span class="text-xs font-normal text-amber-600">（獲得絆2倍）</span>
+                    </label>
+                  </div>
+                  
+                  <div>
+                    <label class="block text-xs font-bold text-gray-500 mb-1">クラス制限（複数選択可、未選択で全クラス可）</label>
+                    <select multiple v-model="tmpl.constraints.allowedClasses" class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm shadow-sm h-24 custom-scrollbar">
+                      <option v-for="opt in classOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label class="block text-xs font-bold text-gray-500 mb-1">編成備考（AIへの指示）</label>
+                    <textarea v-model="tmpl.notes" class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm shadow-sm h-24 custom-scrollbar" placeholder="例: フレンドはキャストリア（ティータイム装備）前衛。配置ボーナスは前衛1.24倍。周回はコヤンスカヤでシステム..."></textarea>
+                  </div>
+                </div>
+
+                    </select>
+                  </div>
+
+                  <div>
+                    <label class="block text-xs font-bold text-gray-500 mb-1">編成備考（AIへの指示）</label>
+                    <textarea v-model="tmpl.notes" class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm shadow-sm h-24 custom-scrollbar" placeholder="例: フレンドはキャストリア（ティータイム装備）前衛。配置ボーナスは前衛1.24倍。周回はコヤンスカヤでシステム..."></textarea>
+                  </div>
+                </div>
+
+                <!-- 固定スロット設定 -->
+                <div>
+                  <label class="block text-xs font-bold text-gray-500 mb-2">固定スロット＆礼装指定（周回要員など）</label>
+                  <div class="space-y-2">
+                    <div v-for="slot in 5" :key="slot" class="flex items-center gap-2 bg-gray-50 p-2 rounded-md border border-gray-200">
+                      <div class="w-12 text-center text-xs font-bold text-gray-400">Slot {{ slot }}</div>
+                      
+                      <!-- 鯖選択 -->
+                      <select v-model="tmpl.constraints.fixedSlots[slot-1]" class="flex-1 bg-white border border-gray-300 rounded px-2 py-1.5 text-xs shadow-sm truncate">
+                        <option :value="null">自由枠（絆稼ぎ用）</option>
+                        <option v-for="svt in servants.filter(s => s.owned)" :key="svt.id" :value="svt.id">
+                          {{ svt.name }} ({{ svt.className }})
+                        </option>
+                      </select>
+                      
+                      <!-- 礼装選択 -->
+                      <select v-model="tmpl.constraints.fixedCEs[slot-1]" class="flex-1 bg-white border border-gray-300 rounded px-2 py-1.5 text-xs shadow-sm truncate">
+                        <option :value="null">自由枠（自動割当）</option>
+                        <option value="teatime">ティータイム (+15%)</option>
+                        <option value="lunchtime">ランチタイム (+10%)</option>
+                        <option value="kyokuten">英霊極点 (+2%)</option>
+                        <option value="kscope">カレイドスコープ</option>
+                        <option value="blackgrail">黒の聖杯</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="mt-3 text-xs text-gray-500 bg-blue-50 p-2 rounded border border-blue-100">
+                    💡 <strong class="text-blue-700">自由枠</strong> と指定したスロットに、絆稼ぎ対象のサーヴァントが自動編成されます。
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- バトル追加ボタン -->
+            <button @click="addBattleTemplate" class="w-full py-4 border-2 border-dashed border-gray-300 text-gray-500 font-bold rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-colors flex items-center justify-center gap-2">
+              <span class="text-xl">＋</span> 新しいバト
+            </button>
+          </div>
+          
+          <div class="mt-8 pt-6 border-t flex flex-col items-center gap-4">
+            <!-- 使用するバトルテンプレートの選択 -->
+            <div class="flex items-center gap-3 bg-white border border-gray-300 rounded-xl px-4 py-3 shadow-sm max-w-md w-full">
+              <span class="text-sm font-bold text-gray-500 shrink-0">⚔️ 使用するバトル:</span>
+              <select v-model="selectedTemplateId" class="flex-1 bg-transparent text-sm font-extrabold text-gray-800 focus:outline-none cursor-pointer">
+                <option value="all">🔄 すべてのバトルを使用（動的自動最適化）</option>
+                <option v-for="tmpl in battleTemplates" :key="tmpl.id" :value="tmpl.id">
+                  {{ tmpl.name }} (絆{{ tmpl.baseBond }} / AP{{ tmpl.ap }})
+                </option>
+              </select>
+            </div>
+
+            <!-- ローカルルールベース高速生成ボタン -->
+            <button @click="runLocalRuleBasedGeneration"
+              class="w-full sm:w-auto px-12 py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-lg font-bold shadow-lg transition-all transform hover:scale-[1.02] flex items-center justify-center gap-3">
+              <span>⚡</span>
+              高速チャート生成 (ルールベース)
+            </button>
+          </div>
+
+          <!-- 結果エリア -->
+          <div v-if="scheduleResults">
+            <!-- サマリーカード -->
+            <div class="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg p-5 text-white mb-6">
+              <div class="flex flex-wrap justify-between items-center gap-4">
+                <div>
+                  <div class="text-sm font-medium opacity-80">📊 シミュレーション結果</div>
+                  <div class="text-xs opacity-60 mt-0.5">生成日時: {{ scheduleResults.generatedAt }}</div>
+                </div>
+                <div class="flex gap-8">
+                  <div class="text-center">
+                    <div class="text-3xl font-extrabold font-mono">{{ scheduleResults.totalRuns.toLocaleString() }}</div>
+                    <div class="text-xs font-medium opacity-80">総周回数</div>
+                  </div>
+                  <div class="text-center">
+                    <div class="text-3xl font-extrabold font-mono">{{ scheduleResults.phases.length }}</div>
+                    <div class="text-xs font-medium opacity-80">フェーズ数</div>
+                  </div>
+                  <div class="text-center">
+                    <div class="text-3xl font-extrabold font-mono">{{ scheduleResults.totalServants }}</div>
+                    <div class="text-xs font-medium opacity-80">対象サーヴァント数</div>
+                  </div>
+                </div>
+
+              <div class="mt-4 flex justify-end">
+                <button @click="exportScheduleJSON" class="text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-md font-bold transition-colors">
+                  📥 JSONとしてエクスポート
+                </button>
+              </div>
+            </div>
+
+            <!-- フェーズカード -->
+            <div class="space-y-4">
+              <div v-for="(phase, pIdx) in scheduleResults.phases" :key="phase.id"
+                class="bg-white rounded-xl shadow-sm border overflow-hidden transition-all"
+                :class="scheduleCheckpoints[phase.id] ? 'border-green-300 bg-green-50/30' : 'border-gray-200'">
+                <!-- フェーズヘッダ -->
+                <div class="px-5 py-3 flex items-center justify-between"
+                  :class="scheduleCheckpoints[phase.id] ? 'bg-green-100' : 'bg-gray-50 border-b border-gray-200'">
+                  <div class="flex items-center gap-3">
+                    <span class="text-xs font-extrabold text-white px-2 py-1 rounded"
+                      :class="scheduleCheckpoints[phase.id] ? 'bg-green-500' : 'bg-blue-600'">
+                      Phase {{ pIdx + 1 }}
+                    </span>
+                    <span class="text-sm font-bold text-gray-700">{{ phase.questName }}</span>
+                    <span class="text-xs text-gray-500">(基礎 {{ phase.baseBond.toLocaleString() }})</span>
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <span class="text-xl font-extrabold font-mono text-blue-700">{{ phase.runs.toLocaleString() }}<span class="text-sm font-bold text-gray-500">周</span></span>
+                    <label class="flex items-center gap-1.5 cursor-pointer bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-md transition-colors">
+                      <input type="checkbox" v-model="scheduleCheckpoints[phase.id]" @change="toggleCheckpoint(phase)" class="rounded border-gray-300 text-green-600 focus:ring-green-500 h-4 w-4">
+                      <span class="text-xs font-bold" :class="scheduleCheckpoints[phase.id] ? 'text-green-600' : 'text-gray-500'">
+                        {{ scheduleCheckpoints[phase.id] ? '完了!' : 'チェック' }}
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- 編成とCE -->
+                <div class="p-5">
+                  <div class="flex items-center gap-2 mb-3">
+                    <span v-if="phase.mainTrait"
+                      class="text-[10px] font-extrabold bg-yellow-100 text-yellow-800 border border-yellow-300 px-2 py-0.5 rounded-full">
+                <div class="p-5">
+                  <div class="flex items-center gap-2 mb-3">
+                    <span v-if="phase.mainTrait"
+                      class="text-[10px] font-extrabold bg-yellow-100 text-yellow-800 border border-yellow-300 px-2 py-0.5 rounded-full">
+                      🎯 特性: {{ phase.mainTrait }}
+                    </span>
+                  </div>
+                  
+                  <!-- パーティメンバー (FGO編成画面風のミニカード) -->
+                  <div class="flex flex-wrap gap-3 mb-4 overflow-x-auto pb-2 custom-scrollbar">
+                    <div v-for="(member, idx) in phase.party" :key="idx"
+                      class="flex-shrink-0 w-52 rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col transition-all duration-300 text-xs bg-white">
+                      
+                      <!-- カードヘッダ -->
+                      <div class="px-2.5 py-1.5 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                        <div class="flex items-center gap-1.5 min-w-0">
+                          <span class="font-bold text-[10px] text-gray-500 bg-white px-2 py-0.5 rounded-full border border-gray-200 shrink-0">
+                            Slot {{ idx + 1 }}
+                          </span>
+                          <img v-if="member.iconUrl" :src="member.iconUrl"
+                            class="w-6 h-6 rounded-full border border-white object-cover shadow-sm shrink-0" />
+                        </div>
+                        <span v-if="member.completed" class="text-[9px] font-bold text-white bg-green-500 px-1.5 py-0.5 rounded shadow-sm shrink-0">達成!</span>
+                      </div>
+
+                      <!-- 設定表示エリア (縮小表示) -->
+                      <div class="p-2.5 space-y-2 bg-gray-50/30 flex-1">
+                        <div>
+                          <label class="block text-[9px] font-bold text-gray-400 mb-0.5">サーヴァント</label>
+                          <div class="font-bold text-gray-800 truncate text-[11px]" :title="member.name">
+                            {{ member.name || '空き枠' }}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label class="block text-[9px] font-bold text-gray-400 mb-0.5">装備礼装</label>
+                          <div class="w-full bg-white border border-gray-200 rounded-md px-2 py-1 text-[10px] text-gray-700 truncate font-semibold">
+                            🛡️ {{ formatCEName(member.equippedCE) }}
+                          </div>
+                        </div>
+
+                        <div class="flex gap-2">
+                          <div class="flex-1">
+                            <label class="block text-[9px] font-bold text-gray-400 mb-0.5">配置ボーナス</label>
+                            <div class="w-full bg-white border border-gray-200 rounded-md px-2 py-0.5 text-[10px] font-mono text-gray-700 font-bold truncate">
+                              {{ phase.partyBonus && phase.partyBonus[idx] ? phase.partyBonus[idx].toFixed(2) + '倍' : '1.00倍' }}
+                        </div>
+                      </div>
+                  <!-- CE配分 -->
+                  <div class="flex flex-wrap gap-2 text-[10px] mt-3 bg-gray-50 p-2.5 rounded-lg border border-gray-200">
+                    <div class="flex items-center gap-1 text-gray-500 font-bold shrink-0">
+                      <span>🛡️</span> 自陣礼装:
+                    </div>
+                    <template v-for="(ce, idx) in phase.partyCEs" :key="idx">
+                      <span v-if="ce !== 'none'" class="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded font-bold">
+                        Slot {{ idx + 1 }}: {{ formatCEName(ce) }}
+                      </span>
+                    </template>
+                    <span class="text-gray-300 px-1 font-normal">|</span>
+                    <div class="flex items-center gap-1 text-gray-500 font-bold shrink-0">
+                      <span>🤝</span> フレンド:
+                    </div>
+                    <span v-for="(fCe, idx) in phase.friendCEs" :key="'f-'+idx" class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded font-bold">
+                      {{ fCe }}
+                    </span>
+                  </div>
+
+                  <!-- 達成者 -->
+                  <div v-if="phase.completedServants.length > 0" class="mt-3 pt-3 border-t border-gray-100">
+                    <span class="text-xs font-bold text-green-600">
+                      ✅ このフェーズで達成: {{ phase.completedServants.join(', ') }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+                    <div class="flex items-center gap-1 text-gray-500 font-bold shrink-0">
+                      <span>🛡️</span> 自陣礼装:
+                    <div class="flex items-center gap-1 text-gray-500 font-bold shrink-0">
+                      <span>🛡️</span> 自陣礼装:
+                    </div>
+                    <template v-for="(ce, idx) in phase.partyCEs" :key="idx">
+                      <span v-if="ce !== 'none'" class="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded font-bold">
+                        Slot {{ idx + 1 }}: {{ formatCEName(ce) }}
+                      </span>
+                    </template>
+                    <span class="text-gray-300 px-1 font-normal">|</span>
+                    <div class="flex items-center gap-1 text-gray-500 font-bold shrink-0">
+                      <span>🤝</span> フレンド:
+                    </div>
+                    <span v-for="(fCe, idx) in phase.friendCEs" :key="'f-'+idx" class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded font-bold">
+                      {{ fCe }}
+                    </span>
+                  </div>
+
+                  <!-- 達成者 -->
+                  <div v-if="phase.completedServants.length > 0" class="mt-3 pt-3 border-t border-gray-100">
+                    <span class="text-xs font-bold text-green-600">
+                      ✅ このフェーズで達成: {{ phase.completedServants.join(', ') }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="bondReqs.js"></script>
+  <script src="app.js"></script>
+</body>
+
+</html>

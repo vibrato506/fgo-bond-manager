@@ -67,6 +67,72 @@
     [v-cloak] {
       display: none;
     }
+
+    .fgo-filter-header {
+      background: linear-gradient(90deg, #1e3a8a 0%, #3b82f6 100%);
+      color: white;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    }
+    
+    .fgo-filter-label {
+      background-color: #1e293b;
+      color: #cbd5e1;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-right: 1px solid #475569;
+    }
+
+    .fgo-rarity-btn {
+      background-color: white;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      color: #334155;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.15s ease-in-out;
+    }
+
+    .fgo-rarity-btn:hover {
+      background-color: #f1f5f9;
+      border-color: #94a3b8;
+    }
+
+    .fgo-rarity-btn.active {
+      background-color: #fffbeb;
+      border-color: #d97706;
+      color: #b45309;
+      box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.2);
+    }
+
+    .fgo-class-btn {
+      background-color: white;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      padding: 2px;
+      cursor: pointer;
+      transition: all 0.15s ease-in-out;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+
+    .fgo-class-btn:hover {
+      background-color: #f9fafb;
+      border-color: #cbd5e1;
+      transform: scale(1.05);
+    }
+
+    .fgo-class-btn.active {
+      background-color: #fffbeb;
+      border-color: #d97706;
+      box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.3);
+    }
+    
+    .fgo-class-img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
   </style>
 </head>
 
@@ -104,60 +170,87 @@
 
     <!-- TAB 1: 所持鯖管理 -->
     <main v-if="activeTab === 'management'" class="flex-1 flex flex-col overflow-hidden bg-white">
-      <div class="p-4 border-b border-gray-200 shrink-0 bg-gray-50">
-        <div class="flex flex-wrap gap-4 items-end">
-          <div class="flex flex-col gap-1">
-            <span class="text-xs font-bold text-gray-500">所持状況</span>
-            <div class="inline-flex rounded-md shadow-sm" role="group">
-              <button @click="filter.possession = 'all'"
-                :class="filter.possession === 'all' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
-                class="px-3 py-1.5 text-sm font-medium border rounded-l-md focus:z-10 transition-colors">
-                すべて
-              </button>
-              <button @click="filter.possession = 'owned'"
-                :class="filter.possession === 'owned' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
-                class="px-3 py-1.5 text-sm font-medium border-t border-b border-r focus:z-10 transition-colors">
-                所持のみ
-              </button>
-              <button @click="filter.possession = 'unowned'"
-                :class="filter.possession === 'unowned' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
-                class="px-3 py-1.5 text-sm font-medium border-t border-b border-r rounded-r-md focus:z-10 transition-colors">
-                未所持
-              </button>
+      <!-- FGO風サーヴァント絞り込みビジュアルパネル -->
+      <div class="p-4 bg-gray-50 border-b border-gray-200 shrink-0">
+        <div class="w-full max-w-4xl mx-auto border border-gray-300 rounded overflow-hidden shadow-sm">
+          <!-- ヘッダー -->
+          <div @click="filterExpanded = !filterExpanded" 
+            class="fgo-filter-header px-4 py-2.5 flex justify-between items-center cursor-pointer select-none">
+            <span class="text-sm tracking-wider flex items-center gap-1.5 justify-center w-full font-bold">
+              サーヴァントを絞り込む <span class="text-xs ml-1">{{ filterExpanded ? '▼' : '▲' }}</span>
+            </span>
+          </div>
+          <!-- フィルターコンテンツ -->
+          <div v-show="filterExpanded" class="bg-white flex flex-col divide-y divide-gray-200">
+            <!-- 所持状況行 -->
+            <div class="flex">
+              <div class="fgo-filter-label w-28 shrink-0 text-xs py-3 select-none">所持状況</div>
+              <div class="flex-1 p-3 flex flex-wrap gap-2.5 items-center bg-[#fafafa]">
+                <div class="inline-flex rounded-md shadow-sm" role="group">
+                  <button @click="filter.possession = 'all'"
+                    :class="filter.possession === 'all' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
+                    class="px-4 py-1.5 text-xs font-bold border rounded-l-md transition-colors">
+                    すべて
+                  </button>
+                  <button @click="filter.possession = 'owned'"
+                    :class="filter.possession === 'owned' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
+                    class="px-4 py-1.5 text-xs font-bold border-t border-b border-r transition-colors">
+                    所持のみ
+                  </button>
+                  <button @click="filter.possession = 'unowned'"
+                    :class="filter.possession === 'unowned' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
+                    class="px-4 py-1.5 text-xs font-bold border-t border-b border-r rounded-r-md transition-colors">
+                    未所持
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-          <div class="flex flex-col gap-1">
-            <span class="text-xs font-bold text-gray-500">レアリティ</span>
-            <select v-model="filter.rarity"
-              class="bg-white border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500 min-w-[100px]">
-              <option value="all">すべて</option>
-              <option value="5">★5 (SSR)</option>
-              <option value="4">★4 (SR)</option>
-              <option value="3">★3 (R)</option>
-              <option value="2">★2 (UC)</option>
-              <option value="1">★1 (C)</option>
-              <option value="0">★0</option>
-            </select>
-          </div>
-          <div class="flex flex-col gap-1">
-            <span class="text-xs font-bold text-gray-500">クラス</span>
-            <select v-model="filter.className"
-              class="bg-white border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500 min-w-[140px]">
-              <option v-for="opt in classOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-            </select>
-          </div>
-          <div class="flex flex-col gap-1">
-            <span class="text-xs font-bold text-gray-500">対象特性 (20%礼装)</span>
-            <select v-model="filter.trait"
-              class="bg-white border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500 min-w-[160px]">
-              <option value="all">すべて</option>
-              <option v-for="t in availableTraits" :key="t" :value="t">{{ t }}</option>
-            </select>
-          </div>
-          <div class="flex flex-col gap-1 flex-1 min-w-[200px]">
-            <span class="text-xs font-bold text-gray-500">名前検索</span>
-            <input type="text" v-model="filter.search" placeholder="サーヴァント名..."
-              class="w-full bg-white border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500" />
+            <!-- レア度行 -->
+            <div class="flex">
+              <div class="fgo-filter-label w-28 shrink-0 text-xs py-3 select-none">レア度</div>
+              <div class="flex-1 p-3 flex flex-wrap gap-2.5 items-center bg-[#fafafa]">
+                <button v-for="rarityVal in ['5', '4', '3', '2', '1', '0']" :key="rarityVal"
+                  @click="filter.rarity = (filter.rarity === rarityVal ? 'all' : rarityVal)"
+                  :class="{'active': filter.rarity === rarityVal}"
+                  class="fgo-rarity-btn text-xs px-4 py-1.5">
+                  ★{{ rarityVal }}
+                </button>
+              </div>
+            </div>
+            <!-- Class行 -->
+            <div class="flex">
+              <div class="fgo-filter-label w-28 shrink-0 text-xs select-none">Class</div>
+              <div class="flex-1 p-3 bg-[#fafafa]">
+                <div class="flex flex-wrap gap-2.5 max-w-2xl">
+                  <button v-for="cls in ['saber', 'archer', 'lancer', 'rider', 'caster', 'assassin', 'berserker', 'ex1', 'ex2', 'shielder', 'ruler', 'avenger', 'alterEgo', 'moonCancer', 'foreigner', 'pretender', 'beast']" :key="cls"
+                    @click="toggleClassFilter(cls)"
+                    :class="{'active': filter.classNames.includes(cls)}"
+                    class="fgo-class-btn relative w-12 h-12 shrink-0"
+                    :title="classOptions.find(c => c.value === cls)?.label">
+                    <img :src="'https://static.atlasacademy.io/JP/ClassIcons/class3_' + classIdMap[cls] + '.png'" class="fgo-class-img" />
+                  </button>
+                </div>
+              </div>
+            </div>
+            <!-- 特性 & 検索行 -->
+            <div class="flex">
+              <div class="fgo-filter-label w-28 shrink-0 text-xs py-3 select-none">特性 & 検索</div>
+              <div class="flex-1 p-3 bg-[#fafafa] flex flex-wrap gap-4 items-center">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-bold text-gray-500">対象特性</span>
+                  <select v-model="filter.trait"
+                    class="bg-white border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500 min-w-[160px]">
+                    <option value="all">すべて</option>
+                    <option v-for="t in availableTraits" :key="t" :value="t">{{ t }}</option>
+                  </select>
+                </div>
+                <div class="flex items-center gap-2 flex-1 min-w-[200px]">
+                  <span class="text-xs font-bold text-gray-500">名前検索</span>
+                  <input type="text" v-model="filter.search" placeholder="サーヴァント名..."
+                    class="w-full bg-white border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500" />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -245,6 +338,13 @@
           :class="activePartyIndex === idx ? 'bg-white text-blue-700 border-gray-200 shadow-[0_4px_0_0_white]' : 'bg-gray-200 text-gray-500 border-gray-300 hover:bg-gray-50'">
           <input v-if="activePartyIndex === idx" v-model="party.name" @click.stop class="bg-transparent border-b border-blue-300 focus:border-blue-600 focus:outline-none w-full text-blue-700 font-bold truncate" />
           <span v-else class="truncate w-full block">{{ party.name }}</span>
+          <!-- コピーボタン -->
+          <button v-if="activePartyIndex === idx" @click.stop="copyParty(idx)" class="text-blue-400 hover:text-blue-600 rounded-full p-0.5 hover:bg-blue-50 flex-shrink-0" title="編成をコピー">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M7 9a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H9a2 2 0 01-2-2V9z" />
+              <path d="M5 3a2 2 0 00-2 2v6a2 2 0 002 2V5h8a2 2 0 00-2-2H5z" />
+            </svg>
+          </button>
           <button v-if="activePartyIndex === idx && parties.length > 1" @click.stop="removeParty(idx)" class="text-red-400 hover:text-red-600 rounded-full p-0.5 hover:bg-red-50 flex-shrink-0" title="編成を削除">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
           </button>
@@ -480,6 +580,82 @@
             </div>
 
           </div>
+        </div>
+
+        <!-- 各編成の絆効率比較セクション -->
+        <div class="mt-8 bg-white border border-gray-200 rounded-xl p-6 shadow-sm min-w-max">
+          <h3 class="text-lg font-extrabold text-gray-800 flex items-center gap-2 mb-4">
+            <span class="text-yellow-500">📊</span> 作成済み編成の絆効率比較一覧
+            <span class="text-xs font-normal text-gray-500">— 各編成タブにおける5つのスロット全員の獲得絆Pの合計値を一覧で比較します</span>
+          </h3>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="border-b border-gray-200 text-xs font-bold text-gray-400 uppercase bg-gray-50">
+                  <th class="py-3 px-4">編成名</th>
+                  <th class="py-3 px-4">パーティメンバー (Slot 1 〜 5)</th>
+                  <th class="py-3 px-4 text-center">ティーポット</th>
+                  <th class="py-3 px-4 text-right bg-blue-50 text-blue-800 font-extrabold">全員の獲得絆P合計/周</th>
+                  <th class="py-3 px-4 text-center">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100 text-sm">
+                <tr v-for="(party, idx) in parties" :key="party.id" 
+                  class="hover:bg-gray-50/50 transition-colors"
+                  :class="activePartyIndex === idx ? 'bg-blue-50/20 font-bold border-l-4 border-l-blue-500' : ''">
+                  <td class="py-3.5 px-4">
+                    <span class="text-gray-800 font-bold">{{ party.name }}</span>
+                    <span v-if="activePartyIndex === idx" class="text-[10px] bg-blue-100 text-blue-700 font-extrabold px-1.5 py-0.5 rounded-full shrink-0 ml-2">選択中</span>
+                  </td>
+                  <td class="py-3.5 px-4">
+                    <!-- パーティメンバーの簡易一覧表示 (アイコン、アイコンがない場合は名前) -->
+                    <div class="flex items-center gap-2.5">
+                      <div v-for="slotIdx in 5" :key="slotIdx" class="flex flex-col items-center">
+                        <template v-if="party.party[slotIdx-1]">
+                          <img v-if="servants.find(s => s.id === party.party[slotIdx-1] || s.name === party.party[slotIdx-1])?.iconUrl"
+                            :src="servants.find(s => s.id === party.party[slotIdx-1] || s.name === party.party[slotIdx-1])?.iconUrl"
+                            class="w-7 h-7 rounded-full border border-white shadow-sm object-cover" 
+                            :title="servants.find(s => s.id === party.party[slotIdx-1] || s.name === party.party[slotIdx-1])?.name"/>
+                          <span v-else class="text-[10px] font-bold text-gray-700 bg-gray-100 px-1 py-0.5 rounded truncate max-w-[50px]"
+                            :title="party.party[slotIdx-1]">
+                            {{ party.party[slotIdx-1] }}
+                          </span>
+                        </template>
+                        <span v-else class="text-[9px] font-bold text-gray-300">空</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="py-3.5 px-4 text-center">
+                    <span v-if="party.teapotActive" class="text-purple-600 font-bold text-xs bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">🫖 2倍</span>
+                    <span v-else class="text-gray-300 text-xs">等倍</span>
+                  </td>
+                  <td class="py-3.5 px-4 text-right font-mono font-extrabold bg-blue-50/30 text-gray-800"
+                    :class="activePartyIndex === idx ? 'text-blue-700 text-base' : 'text-gray-800'">
+                    {{ calculatePartyTotalBond(party).toLocaleString() }} <span class="text-[10px] text-gray-400 font-bold">pt</span>
+                  </td>
+                  <td class="py-3.5 px-4 text-center">
+                    <div class="flex justify-center gap-2">
+                      <button v-if="activePartyIndex !== idx" 
+                        @click="activePartyIndex = idx" 
+                        class="text-xs bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-md shadow-sm transition-all">
+                        この編成に切替
+                      </button>
+                      <span v-else class="text-xs text-gray-400 font-bold">-</span>
+                      
+                      <!-- 複製ボタン -->
+                      <button @click="copyParty(idx)" 
+                        class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-2.5 py-1.5 rounded-md border border-gray-300 transition-all shadow-sm"
+                        title="この編成をコピー">
+                        コピー
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="text-[11px] text-gray-500 mt-3">※ 合計獲得絆P/周は、各パーティの「基礎絆P、配置ボーナス、装備している概念礼装、絆15ボーナス、その他加算、ティーポット適用有無」を動的に合算評価したものです。</p>
         </div>
       </main>
     </div>
