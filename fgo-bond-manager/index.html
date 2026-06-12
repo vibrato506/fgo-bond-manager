@@ -8,6 +8,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js"></script>
   <link
     href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700;900&family=Cinzel:wght@700&display=swap"
     rel="stylesheet">
@@ -73,7 +74,7 @@
       color: white;
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
     }
-    
+
     .fgo-filter-label {
       background-color: #1e293b;
       color: #cbd5e1;
@@ -127,18 +128,26 @@
       border-color: #d97706;
       box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.3);
     }
-    
+
     .fgo-class-img {
       width: 100%;
       height: 100%;
       object-fit: contain;
+    }
+
+    .timeline-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 16px;
+      width: 2px;
+      background-color: #cbd5e1;
     }
   </style>
 </head>
 
 <body class="antialiased min-h-screen flex flex-col">
   <div id="app" v-cloak class="flex flex-col h-screen overflow-hidden">
-    <!-- Header -->
     <header
       class="bg-white border-b border-gray-200 px-6 py-3 flex justify-between items-center z-10 shrink-0 shadow-sm">
       <div class="flex items-center gap-6">
@@ -154,6 +163,11 @@
             class="px-4 py-2 rounded-md text-sm transition-colors">
             編成シミュレーション
           </button>
+          <button @click="activeTab = 'scheduler'"
+            :class="{'bg-blue-50 text-blue-700 font-bold': activeTab === 'scheduler', 'text-gray-600 hover:bg-gray-50': activeTab !== 'scheduler'}"
+            class="px-4 py-2 rounded-md text-sm transition-colors">
+            自動スケジューラー
+          </button>
         </nav>
       </div>
       <div class="flex gap-3">
@@ -168,21 +182,16 @@
       </div>
     </header>
 
-    <!-- TAB 1: 所持鯖管理 -->
     <main v-if="activeTab === 'management'" class="flex-1 flex flex-col overflow-hidden bg-white">
-      <!-- FGO風サーヴァント絞り込みビジュアルパネル -->
       <div class="p-4 bg-gray-50 border-b border-gray-200 shrink-0">
         <div class="w-full max-w-4xl mx-auto border border-gray-300 rounded overflow-hidden shadow-sm">
-          <!-- ヘッダー -->
-          <div @click="filterExpanded = !filterExpanded" 
-            class="fgo-filter-header px-4 py-2.5 flex justify-between items-center cursor-pointer select-none">
-            <span class="text-sm tracking-wider flex items-center gap-1.5 justify-center w-full font-bold">
-              サーヴァントを絞り込む <span class="text-xs ml-1">{{ filterExpanded ? '▼' : '▲' }}</span>
+          <div @click="filterExpanded = !filterExpanded"
+            class="fgo-filter-header px-4 py-2.5 flex justify-between items-center cursor-pointer select-none hover:bg-gray-200 transition-colors bg-gray-100 border-b border-gray-200">
+            <span class="text-sm tracking-wider flex items-center gap-2 justify-center w-full font-extrabold text-gray-700">
+              <span class="text-blue-500">🔍</span> サーヴァント絞り込みフィルター (クリックで開閉) <span class="text-xs ml-1 text-gray-500">{{ filterExpanded ? '▲ 閉じる' : '▼ 開く' }}</span>
             </span>
           </div>
-          <!-- フィルターコンテンツ -->
           <div v-show="filterExpanded" class="bg-white flex flex-col divide-y divide-gray-200">
-            <!-- 所持状況行 -->
             <div class="flex">
               <div class="fgo-filter-label w-28 shrink-0 text-xs py-3 select-none">所持状況</div>
               <div class="flex-1 p-3 flex flex-wrap gap-2.5 items-center bg-[#fafafa]">
@@ -205,44 +214,79 @@
                 </div>
               </div>
             </div>
-            <!-- レア度行 -->
             <div class="flex">
               <div class="fgo-filter-label w-28 shrink-0 text-xs py-3 select-none">レア度</div>
               <div class="flex-1 p-3 flex flex-wrap gap-2.5 items-center bg-[#fafafa]">
                 <button v-for="rarityVal in ['5', '4', '3', '2', '1', '0']" :key="rarityVal"
-                  @click="filter.rarity = (filter.rarity === rarityVal ? 'all' : rarityVal)"
-                  :class="{'active': filter.rarity === rarityVal}"
-                  class="fgo-rarity-btn text-xs px-4 py-1.5">
+                  @click="toggleRarityFilter(rarityVal)"
+                  :class="{'active': filter.rarities.includes(rarityVal)}" class="fgo-rarity-btn text-xs px-4 py-1.5">
                   ★{{ rarityVal }}
                 </button>
               </div>
             </div>
-            <!-- Class行 -->
             <div class="flex">
               <div class="fgo-filter-label w-28 shrink-0 text-xs select-none">Class</div>
               <div class="flex-1 p-3 bg-[#fafafa]">
                 <div class="flex flex-wrap gap-2.5 max-w-2xl">
-                  <button v-for="cls in ['saber', 'archer', 'lancer', 'rider', 'caster', 'assassin', 'berserker', 'ex1', 'ex2', 'shielder', 'ruler', 'avenger', 'alterEgo', 'moonCancer', 'foreigner', 'pretender', 'beast']" :key="cls"
-                    @click="toggleClassFilter(cls)"
-                    :class="{'active': filter.classNames.includes(cls)}"
+                  <button
+                    v-for="cls in ['saber', 'archer', 'lancer', 'rider', 'caster', 'assassin', 'berserker', 'ex1', 'ex2', 'shielder', 'ruler', 'avenger', 'alterEgo', 'moonCancer', 'foreigner', 'pretender', 'beast']"
+                    :key="cls" @click="toggleClassFilter(cls)" :class="{'active': filter.classNames.includes(cls)}"
                     class="fgo-class-btn relative w-12 h-12 shrink-0"
                     :title="classOptions.find(c => c.value === cls)?.label">
-                    <img :src="'https://static.atlasacademy.io/JP/ClassIcons/class3_' + classIdMap[cls] + '.png'" class="fgo-class-img" />
+                    <img :src="'https://static.atlasacademy.io/JP/ClassIcons/class3_' + classIdMap[cls] + '.png'"
+                      class="fgo-class-img" />
                   </button>
                 </div>
               </div>
             </div>
-            <!-- 特性 & 検索行 -->
+            <div class="flex">
+              <div class="fgo-filter-label w-28 shrink-0 text-xs py-3 select-none">状態フィルタ</div>
+              <div class="flex-1 p-3 flex flex-wrap gap-5 items-center bg-[#fafafa]">
+                <label class="flex items-center gap-2 cursor-pointer select-none">
+                  <input type="checkbox" v-model="filter.isGrandOnly" class="rounded border-gray-300 h-4 w-4 text-blue-600 focus:ring-blue-500">
+                  <span class="text-xs font-bold text-gray-700">グランド指定のみ</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer select-none">
+                  <input type="checkbox" v-model="filter.isTargetNotReachedOnly" class="rounded border-gray-300 h-4 w-4 text-blue-600 focus:ring-blue-500">
+                  <span class="text-xs font-bold text-gray-700">目標未達成のみ</span>
+                </label>
+              </div>
+            </div>
+            <div class="flex">
+              <div class="fgo-filter-label w-28 shrink-0 text-xs py-3 select-none">ソート</div>
+              <div class="flex-1 p-3 flex flex-wrap gap-4 items-center bg-[#fafafa]">
+                <div class="flex items-center gap-2">
+                  <select v-model="sortConfig.key" class="bg-white border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500">
+                    <option value="id">デフォルト (ID順)</option>
+                    <option value="rarity">レアリティ</option>
+                    <option value="currentLv">現在の絆Lv</option>
+                    <option value="remainingP">残り絆Pt</option>
+                  </select>
+                  <button @click="sortConfig.order = sortConfig.order === 'asc' ? 'desc' : 'asc'" class="bg-white border border-gray-300 rounded px-3 py-1.5 text-sm font-bold shadow-sm hover:bg-gray-50 flex items-center gap-1 transition-colors">
+                    <span v-if="sortConfig.order === 'asc'">昇順 ▲</span>
+                    <span v-else>降順 ▼</span>
+                  </button>
+                </div>
+              </div>
+            </div>
             <div class="flex">
               <div class="fgo-filter-label w-28 shrink-0 text-xs py-3 select-none">特性 & 検索</div>
               <div class="flex-1 p-3 bg-[#fafafa] flex flex-wrap gap-4 items-center">
                 <div class="flex items-center gap-2">
                   <span class="text-xs font-bold text-gray-500">対象特性</span>
-                  <select v-model="filter.trait"
-                    class="bg-white border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500 min-w-[160px]">
-                    <option value="all">すべて</option>
-                    <option v-for="t in availableTraits" :key="t" :value="t">{{ t }}</option>
-                  </select>
+                  <div class="flex flex-col gap-2">
+                    <select @change="if($event.target.value !== 'all') { toggleTraitFilter($event.target.value); $event.target.value='all'; }"
+                      class="bg-white border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500 min-w-[160px]">
+                      <option value="all">特性を追加...</option>
+                      <option v-for="t in availableTraits" :key="t" :value="t">{{ t }}</option>
+                    </select>
+                    <div class="flex flex-wrap gap-1 max-w-[200px]">
+                      <span v-for="t in filter.traits" :key="t" @click="toggleTraitFilter(t)"
+                        class="px-2 py-1 text-[10px] bg-blue-100 text-blue-700 rounded-full cursor-pointer hover:bg-blue-200 shadow-sm flex items-center gap-1">
+                        {{ t }} <span class="font-bold">×</span>
+                      </span>
+                    </div>
+                  </div>
                 </div>
                 <div class="flex items-center gap-2 flex-1 min-w-[200px]">
                   <span class="text-xs font-bold text-gray-500">名前検索</span>
@@ -262,6 +306,8 @@
               <th class="px-4 py-3 font-semibold text-sm text-gray-700 border-b border-gray-300 w-64">サーヴァント名</th>
               <th class="px-4 py-3 font-semibold text-sm text-gray-700 border-b border-gray-300 w-24 text-center">所持
               </th>
+              <th class="px-4 py-3 font-semibold text-sm text-gray-700 border-b border-gray-300 w-24 text-center">グランド
+              </th>
               <th class="px-4 py-2 font-medium text-gray-600">現在絆Lv</th>
               <th class="px-4 py-2 font-medium text-gray-600">ゲーム内表示next-exp</th>
               <th class="px-4 py-2 font-medium text-gray-600">目標絆Lv</th>
@@ -279,12 +325,17 @@
                   <div v-else
                     class="w-10 h-10 rounded bg-gray-100 border border-gray-300 flex items-center justify-center text-[10px] text-gray-400 shadow-sm">
                     No IMG</div>
-                  <span>{{ svt.name }}</span>
+                  <span>{{ svt.name }} <span class="text-xs text-gray-500 font-bold ml-1">★{{ svt.rarity }}</span></span>
                 </div>
               </td>
               <td class="px-4 py-2 text-center">
                 <input type="checkbox" v-model="svt.owned"
                   class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-5 w-5 cursor-pointer">
+              </td>
+              <td class="px-4 py-2 text-center">
+                <input v-if="svt.owned" type="radio" :value="svt.id" v-model="globalGrandSvtIds[getGrandGroup(svt.className)]"
+                  class="h-4 w-4 text-blue-600 focus:ring-blue-500 cursor-pointer">
+                <span v-else class="text-gray-400">-</span>
               </td>
               <td class="px-4 py-2">
                 <input v-if="svt.owned" type="number" v-model.number="svt.currentLv" min="0" max="15"
@@ -320,45 +371,51 @@
               </td>
             </tr>
             <tr v-if="filteredServants.length === 0">
-              <td colspan="5" class="px-4 py-8 text-center text-gray-500">データが見つかりません。</td>
+              <td colspan="6" class="px-4 py-8 text-center text-gray-500">データが見つかりません。</td>
             </tr>
           </tbody>
         </table>
       </div>
     </main>
 
-    <!-- TAB 2: 編成シミュレーション -->
     <div v-if="activeTab === 'simulation'" class="flex flex-col flex-1 overflow-hidden bg-gray-50">
-
-      <!-- 編成タブUI -->
-      <div class="bg-gray-100 border-b border-gray-200 px-4 pt-2 flex items-end overflow-x-auto shrink-0 custom-scrollbar">
-        <div v-for="(party, idx) in parties" :key="party.id" 
-          @click="activePartyIndex = idx"
+      <div
+        class="bg-gray-100 border-b border-gray-200 px-4 pt-2 flex items-end overflow-x-auto shrink-0 custom-scrollbar">
+        <div v-for="(party, idx) in parties" :key="party.id" @click="activePartyIndex = idx"
           class="px-4 py-2 mr-1 rounded-t-lg text-sm font-bold cursor-pointer border-t border-l border-r transition-colors flex items-center gap-2 group min-w-[120px] max-w-[200px]"
           :class="activePartyIndex === idx ? 'bg-white text-blue-700 border-gray-200 shadow-[0_4px_0_0_white]' : 'bg-gray-200 text-gray-500 border-gray-300 hover:bg-gray-50'">
-          <input v-if="activePartyIndex === idx" v-model="party.name" @click.stop class="bg-transparent border-b border-blue-300 focus:border-blue-600 focus:outline-none w-full text-blue-700 font-bold truncate" />
+          <input v-if="activePartyIndex === idx" v-model="party.name" @click.stop
+            class="bg-transparent border-b border-blue-300 focus:border-blue-600 focus:outline-none w-full text-blue-700 font-bold truncate" />
           <span v-else class="truncate w-full block">{{ party.name }}</span>
-          <!-- コピーボタン -->
-          <button v-if="activePartyIndex === idx" @click.stop="copyParty(idx)" class="text-blue-400 hover:text-blue-600 rounded-full p-0.5 hover:bg-blue-50 flex-shrink-0" title="編成をコピー">
+          <button v-if="activePartyIndex === idx" @click.stop="copyParty(idx)"
+            class="text-blue-400 hover:text-blue-600 rounded-full p-0.5 hover:bg-blue-50 flex-shrink-0" title="編成をコピー">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
               <path d="M7 9a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H9a2 2 0 01-2-2V9z" />
               <path d="M5 3a2 2 0 00-2 2v6a2 2 0 002 2V5h8a2 2 0 00-2-2H5z" />
             </svg>
           </button>
-          <button v-if="activePartyIndex === idx && parties.length > 1" @click.stop="removeParty(idx)" class="text-red-400 hover:text-red-600 rounded-full p-0.5 hover:bg-red-50 flex-shrink-0" title="編成を削除">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+          <button v-if="activePartyIndex === idx && parties.length > 1" @click.stop="removeParty(idx)"
+            class="text-red-400 hover:text-red-600 rounded-full p-0.5 hover:bg-red-50 flex-shrink-0" title="編成を削除">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd"
+                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                clip-rule="evenodd" />
+            </svg>
           </button>
         </div>
-        <button @click="addParty" class="px-3 py-2 mr-1 rounded-t-lg text-sm font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors flex items-center gap-1 shrink-0 mb-[1px]">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+        <button @click="addParty"
+          class="px-3 py-2 mr-1 rounded-t-lg text-sm font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors flex items-center gap-1 shrink-0 mb-[1px]">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd"
+              d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
+              clip-rule="evenodd" />
+          </svg>
           追加
         </button>
       </div>
 
-      <!-- 上部パネル: シミュレーション設定 -->
       <div class="bg-white border-b border-gray-200 shadow-sm shrink-0 z-10">
         <div class="px-6 py-5 max-w-7xl mx-auto flex flex-col gap-5">
-
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-6">
               <h2 class="text-lg font-extrabold text-gray-800 flex items-center gap-2">
@@ -373,7 +430,6 @@
                 </span>
               </div>
             </div>
-            <!-- ティーポットトグル -->
             <label
               class="relative inline-flex items-center cursor-pointer bg-purple-50 px-4 py-2 rounded-full border border-purple-200 hover:bg-purple-100 transition-colors shadow-sm">
               <input type="checkbox" v-model="currentParty.teapotActive" class="sr-only peer">
@@ -385,22 +441,19 @@
           </div>
 
           <div class="flex flex-wrap gap-6 items-end">
-            <!-- 基礎ポイント -->
             <div class="flex flex-col gap-1.5">
               <label class="text-xs font-bold text-gray-500">基礎絆ポイント</label>
               <div class="flex gap-2 items-center">
                 <input type="number" v-model.number="currentParty.baseBond"
                   class="w-28 bg-white border border-gray-300 rounded-md px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono shadow-sm" />
                 <button @click="currentParty.baseBond = 4748"
-                  class="px-3 py-2 text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-md hover:bg-indigo-100 transition-colors shadow-sm">戴冠戦100★★★
+                  class="px-3 py-2 text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-md hover:bg-indigo-100 transition-colors shadow-sm">戴冠戦
                   (4748)</button>
                 <button @click="currentParty.baseBond = 3798"
-                  class="px-3 py-2 text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md hover:bg-emerald-100 transition-colors shadow-sm">オデコ90★★
+                  class="px-3 py-2 text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md hover:bg-emerald-100 transition-colors shadow-sm">オデコ90++
                   (3798)</button>
               </div>
             </div>
-
-            <!-- サポート礼装 -->
             <div class="flex flex-col gap-1.5">
               <label class="text-xs font-bold text-gray-500">サポート絆UP礼装 (最大2枠)</label>
               <div class="flex gap-2">
@@ -414,8 +467,6 @@
                 </select>
               </div>
             </div>
-
-            <!-- その他加算 -->
             <div class="flex flex-col gap-1.5">
               <label class="text-xs font-bold text-gray-500">その他の加算 (%)</label>
               <input type="number" v-model.number="currentParty.extraGlobalPercent"
@@ -426,7 +477,6 @@
         </div>
       </div>
 
-      <!-- 下段：メイン編成エリア (横スクロール) -->
       <main class="flex-1 overflow-x-auto overflow-y-auto p-6 custom-scrollbar relative">
         <div class="flex justify-between items-center mb-6 min-w-max">
           <h2 class="text-xl font-extrabold text-gray-800 flex items-center gap-2">
@@ -436,65 +486,64 @@
             <span class="text-xs text-gray-500 font-bold mx-3">配置ボーナス一括設定:</span>
             <div class="inline-flex rounded-md shadow-sm" role="group">
               <button @click="applyBonusPreset('front')" type="button"
-                class="px-4 py-2 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-l-md hover:bg-blue-100 transition-colors">
-                フレンド前衛 (1.24/1.0倍)
-              </button>
+                class="px-4 py-2 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-l-md hover:bg-blue-100 transition-colors">フレンド前衛
+                (1.24/1.04倍)</button>
               <button @click="applyBonusPreset('back')" type="button"
-                class="px-4 py-2 text-xs font-bold text-gray-700 bg-gray-50 border border-l-0 border-gray-300 rounded-r-md hover:bg-gray-100 transition-colors">
-                フレンド後衛 (すべて1倍)
-              </button>
+                class="px-4 py-2 text-xs font-bold text-gray-700 bg-gray-50 border border-l-0 border-gray-300 rounded-r-md hover:bg-gray-100 transition-colors">フレンド後衛
+                (すべて1.04倍)</button>
             </div>
           </div>
         </div>
 
-        <!-- 5枠の横並びカード -->
         <div class="flex gap-4 min-w-max pb-8">
           <div v-for="(slotName, index) in ['Slot 1', 'Slot 2', 'Slot 3', 'Slot 4', 'Slot 5']" :key="index"
             class="flex-shrink-0 w-72 rounded-xl shadow-sm overflow-hidden flex flex-col transition-all duration-300"
-            :class="currentParty.isGrand && currentParty.isGrand[index] ? 'bg-blue-50/30 border-2 border-blue-500 shadow-blue-200' : 'bg-white border border-gray-200'">
-
-            <!-- カードヘッダ -->
+            :class="isGrand(getPartyServant(index)) ? 'bg-blue-50/30 border-2 border-blue-500 shadow-blue-200' : 'bg-white border border-gray-200'">
             <div class="px-4 py-3 border-b flex justify-between items-center"
-              :class="currentParty.isGrand && currentParty.isGrand[index] ? 'bg-blue-100 border-blue-200' : 'bg-gray-50 border-gray-200'">
+              :class="isGrand(getPartyServant(index)) ? 'bg-blue-100 border-blue-200' : 'bg-gray-50 border-gray-200'">
               <div class="flex items-center gap-2">
                 <h3
                   class="font-bold text-gray-700 bg-white px-3 py-1 rounded-full text-sm shadow-sm border border-gray-200">
                   Slot {{ index + 1 }}</h3>
-                <button @click="currentParty.isGrand[index] = !currentParty.isGrand[index]"
-                  class="text-[10px] font-extrabold px-2 py-0.5 rounded transition-colors border shadow-sm"
-                  :class="currentParty.isGrand[index] ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50'">
-                  グランド
+                <span v-if="isGrand(getPartyServant(index))"
+                  class="text-[10px] font-extrabold px-2 py-0.5 rounded bg-blue-600 text-white border border-blue-700 shadow-sm">グランド</span>
+                  <button type="button" @click="openServantPicker('simulation', index)"
+                  class="w-full bg-white border border-gray-300 rounded-md px-2 py-1.5 text-sm font-medium hover:bg-gray-50 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm flex items-center justify-between transition-colors h-10">
+                  <div class="flex items-center gap-2 truncate">
+                    <img v-if="getPartyServant(index)?.iconUrl" :src="getPartyServant(index).iconUrl" class="w-6 h-6 rounded-full border border-gray-200 object-cover" />
+                    <div v-else-if="currentParty.party[index]" class="w-6 h-6 rounded-full bg-gray-200 border border-gray-300 flex items-center justify-center text-[8px] text-gray-500">No IMG</div>
+                    <span v-if="getPartyServant(index)" class="truncate">{{ getPartyServant(index).name }}</span>
+                    <span v-else class="text-gray-400">未選択</span>
+                  </div>
+                  <span class="text-gray-400 text-xs">▼</span>
                 </button>
-                <img v-if="currentParty.party[index] && getPartyServant(index) && getPartyServant(index).iconUrl"
-                  :src="getPartyServant(index).iconUrl"
-                  class="w-8 h-8 rounded-full border-2 border-white object-cover shadow-sm" />
               </div>
               <button v-if="currentParty.party[index]" @click="clearSlot(index)"
                 class="text-xs text-red-500 hover:text-red-700 font-bold bg-red-50 px-2 py-1 rounded">クリア</button>
             </div>
 
-            <!-- 設定エリア -->
             <div class="p-4 bg-gray-50/50 border-b border-gray-200 space-y-4 flex-1">
+              <div v-if="getPartyServant(index)" class="space-y-1.5">
+                <span class="text-[10px] font-bold text-gray-400 block">保有特性</span>
+                <div class="flex flex-wrap gap-1">
+                  <span v-for="t in getServantAllTraits(getPartyServant(index))" :key="t"
+                    class="px-1.5 py-0.5 text-[9px] font-bold bg-gray-200 text-gray-600 rounded">
+                    {{ t }}
+                  </span>
+                  <span v-if="getServantAllTraits(getPartyServant(index)).length === 0" class="text-[9px] text-gray-400">なし</span>
+                </div>
+              </div>
+
               <div>
-                <label class="block text-xs font-bold text-gray-500 mb-1">サーヴァント選択</label>
-                <select v-model="currentParty.party[index]"
-                  class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-semibold text-gray-800 shadow-sm truncate">
-                  <option :value="null">未選択</option>
-                  <option v-for="svt in ownedServantsList" :key="svt.id" :value="svt.id">
-                    {{ svt.name }} ({{ classOptions.find(c => c.value === svt.className)?.label || svt.className }})
-                  </option>
-                </select>
                 <div v-if="currentParty.party[index] === 800100"
                   class="mt-2 flex items-center gap-2 bg-gray-100 p-2 rounded-md border border-gray-200">
                   <span class="text-[10px] font-bold text-gray-600">マシュのコスト</span>
                   <button @click="currentParty.mashCost16[index] = !currentParty.mashCost16[index]"
                     class="text-[10px] font-extrabold px-2 py-0.5 rounded transition-colors border shadow-sm"
-                    :class="currentParty.mashCost16[index] ? 'bg-purple-600 text-white border-purple-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'">
-                    {{ currentParty.mashCost16[index] ? '16' : '0' }}
-                  </button>
+                    :class="currentParty.mashCost16[index] ? 'bg-purple-600 text-white border-purple-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'">{{
+                    currentParty.mashCost16[index] ? '16' : '0' }}</button>
                 </div>
               </div>
-
               <div>
                 <label class="block text-xs font-bold text-gray-500 mb-1">装備礼装 (自枠)</label>
                 <div class="flex flex-col gap-2">
@@ -502,93 +551,91 @@
                     class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-gray-700 shadow-sm truncate">
                     <option v-for="opt in partyCEOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                   </select>
-                  <select v-if="currentParty.isGrand && currentParty.isGrand[index]" v-model="currentParty.partyCEs2[index]"
+                  <select v-if="isGrand(getPartyServant(index))"
+                    v-model="currentParty.partyCEs2[index]"
                     class="w-full bg-blue-50 border border-blue-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-blue-800 shadow-sm truncate">
                     <option v-for="opt in partyCEOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                   </select>
                 </div>
               </div>
-
               <div>
                 <label class="block text-xs font-bold text-gray-500 mb-1">配置ボーナス (B)</label>
                 <select v-model.number="currentParty.partyBonus[index]"
                   class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 font-mono shadow-sm text-gray-700">
-                  <option :value="1.00">1.00倍</option>
+                  <option :value="1.00">1.00倍 (後衛)</option>
+                  <option :value="1.04">1.04倍 (前衛)</option>
+                  <option :value="1.20">1.20倍 (後衛)</option>
                   <option :value="1.24">1.24倍 (前衛)</option>
                 </select>
               </div>
             </div>
 
-            <!-- 下部：リザルトエリア（ゲーム画面風） -->
             <div class="fgo-result-bg p-4 flex flex-col items-center justify-center relative min-h-[140px]">
               <template v-if="getPartyServant(index)">
-                <!-- ボーナス%表示バッジ -->
                 <div v-if="getSlotBonusPercent(index) > 0" class="absolute top-2 right-2 z-20">
-                  <div class="bg-yellow-400 text-yellow-900 text-xs font-extrabold px-1.5 py-0.5 rounded shadow-sm">
-                    +{{ getSlotBonusPercent(index) }}%
-                  </div>
+                  <div class="bg-yellow-400 text-yellow-900 text-xs font-extrabold px-1.5 py-0.5 rounded shadow-sm">+{{
+                    getSlotBonusPercent(index) }}%</div>
                 </div>
                 <div class="text-center w-full">
-                  <!-- 獲得絆P (Base + Bonus) -->
-                  <div class="text-2xl fgo-number mb-0.5">
+                  <div class="flex flex-col items-center justify-center min-h-[90px] w-full">
                     <template v-if="calculateTargetRemainingP(getPartyServant(index)) > 0">
-                      + {{ calculateSlotPointsPerRun(index).base.toLocaleString() }}
-                      <span class="text-sm fgo-bonus">(+{{ calculateSlotPointsPerRun(index).bonus.toLocaleString() }})</span>
+                      <!-- 獲得ポイント表示 (+C (+Bonus)) -->
+                      <div class="text-2xl fgo-number flex items-center justify-center">
+                        <span class="text-yellow-400 font-extrabold">+{{ calculateSlotPointsPerRun(index).baseVal.toLocaleString() }}</span>
+                        <span class="text-sm text-yellow-500 font-bold ml-1.5">(+{{ calculateSlotPointsPerRun(index).bonus.toLocaleString() }})</span>
+                      </div>
+                      <!-- 獲得合計値表示 -->
+                      <div class="text-xs font-bold text-yellow-600/90 mb-1.5">
+                        計 {{ calculateSlotPointsPerRun(index).total.toLocaleString() }} pt/周
+                      </div>
+                      
+                      <!-- NEXT表示 -->
+                      <div class="text-sm font-mono flex items-center justify-center gap-1.5 mt-0.5">
+                        <span class="text-yellow-600 font-black tracking-wider text-[11px]">NEXT</span>
+                        <span class="font-extrabold text-[13px] text-gray-100">{{ calculateNextLvRemainingP(getPartyServant(index)).toLocaleString() }}</span>
+                      </div>
+                      <!-- 目標残りP -->
+                      <div class="text-[10px] text-gray-400 font-medium mt-0.5">
+                        (目標残り: <span class="font-mono text-gray-300 font-bold">{{ calculateTargetRemainingP(getPartyServant(index)).toLocaleString() }}</span>)
+                      </div>
                     </template>
                     <template v-else>
-                      -
+                      <!-- MAX表示 -->
+                      <div class="text-3xl font-black tracking-wider drop-shadow-md text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 py-3 select-none">
+                        MAX
+                      </div>
                     </template>
                   </div>
-                  <!-- 計 -->
-                  <div class="text-lg font-bold text-yellow-400 mb-2">
-                    <template v-if="calculateTargetRemainingP(getPartyServant(index)) > 0">
-                      計 {{ calculateSlotPointsPerRun(index).total.toLocaleString() }}
-                    </template>
-                  </div>
-                  <!-- NEXT絆P -->
-                  <div class="text-[11px] text-gray-300 font-bold bg-black/30 px-2 py-1 rounded-md inline-block">
-                    <span class="fgo-next-label mr-1 text-yellow-600">NEXT</span>
-                    目標:<span class="fgo-next-value mx-1">{{ calculateTargetRemainingP(getPartyServant(index)) > 0 ? calculateTargetRemainingP(getPartyServant(index)).toLocaleString() : '-' }}</span>, 
-                    次lv:<span class="fgo-next-value ml-1">{{ calculateNextLvRemainingP(getPartyServant(index)) > 0 ? calculateNextLvRemainingP(getPartyServant(index)).toLocaleString() : '-' }}</span>
-                  </div>
-                  <!-- 周回数 -->
+
                   <div class="mt-3 pt-3 border-t border-yellow-800/50 flex justify-between items-center w-full px-2">
                     <span class="text-xs text-yellow-600 font-bold">目標まで</span>
-                    <span class="text-xl text-yellow-400 font-bold font-mono">
-                      {{ calculateTargetRemainingP(getPartyServant(index)) > 0 ? calculateSlotRunsNeeded(index) : '-' }}
-                      <span class="text-sm">周</span>
+                    <span class="text-xl text-yellow-400 font-bold font-mono" :class="calculateTargetRemainingP(getPartyServant(index)) === 0 ? 'text-green-400 font-extrabold' : ''">
+                      {{ calculateTargetRemainingP(getPartyServant(index)) > 0 ? calculateSlotRunsNeeded(index) : '達成済' }}
+                      <span v-if="calculateTargetRemainingP(getPartyServant(index)) > 0" class="text-sm text-yellow-500 ml-0.5">周</span>
                     </span>
                   </div>
-                  
-                  <!-- ボーナス内訳 -->
-                  <div v-if="getSlotBonusDetails(index).length > 0" class="mt-3 pt-3 border-t border-yellow-800/50 w-full text-left">
+                  <div v-if="getSlotBonusDetails(index).length > 0"
+                    class="mt-3 pt-3 border-t border-yellow-800/50 w-full text-left">
                     <div class="text-[10px] text-yellow-600 font-bold mb-1 px-1">▼ ボーナス内訳</div>
                     <ul class="text-[10px] text-yellow-100/70 space-y-0.5 px-2">
-                      <li v-for="(detail, i) in getSlotBonusDetails(index)" :key="i" class="flex justify-between items-center">
-                        <span>{{ detail.split(':')[0] }}</span>
-                        <span class="font-bold text-yellow-400/90">{{ detail.split(':')[1] }}</span>
-                      </li>
+                      <li v-for="(detail, i) in getSlotBonusDetails(index)" :key="i"
+                        class="flex justify-between items-center"><span>{{ detail.split(':')[0] }}</span><span
+                          class="font-bold text-yellow-400/90">{{ detail.split(':')[1] }}</span></li>
                     </ul>
                   </div>
                 </div>
               </template>
               <template v-else>
-                <div class="text-yellow-800/50 font-bold text-sm text-center">
-                  NO SERVANT
-                </div>
+                <div class="text-yellow-800/50 font-bold text-sm text-center">NO SERVANT</div>
               </template>
             </div>
-
           </div>
         </div>
 
-        <!-- 各編成の絆効率比較セクション -->
         <div class="mt-8 bg-white border border-gray-200 rounded-xl p-6 shadow-sm min-w-max">
           <h3 class="text-lg font-extrabold text-gray-800 flex items-center gap-2 mb-4">
             <span class="text-yellow-500">📊</span> 作成済み編成の絆効率比較一覧
-            <span class="text-xs font-normal text-gray-500">— 各編成タブにおける5つのスロット全員の獲得絆Pの合計値を一覧で比較します</span>
           </h3>
-
           <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse">
               <thead>
@@ -601,67 +648,632 @@
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100 text-sm">
-                <tr v-for="(party, idx) in parties" :key="party.id" 
-                  class="hover:bg-gray-50/50 transition-colors"
+                <tr v-for="(party, idx) in parties" :key="party.id" class="hover:bg-gray-50/50 transition-colors"
                   :class="activePartyIndex === idx ? 'bg-blue-50/20 font-bold border-l-4 border-l-blue-500' : ''">
-                  <td class="py-3.5 px-4">
-                    <span class="text-gray-800 font-bold">{{ party.name }}</span>
-                    <span v-if="activePartyIndex === idx" class="text-[10px] bg-blue-100 text-blue-700 font-extrabold px-1.5 py-0.5 rounded-full shrink-0 ml-2">選択中</span>
+                  <td class="py-3.5 px-4"><span class="text-gray-800 font-bold">{{ party.name }}</span><span
+                      v-if="activePartyIndex === idx"
+                      class="text-[10px] bg-blue-100 text-blue-700 font-extrabold px-1.5 py-0.5 rounded-full shrink-0 ml-2">選択中</span>
                   </td>
                   <td class="py-3.5 px-4">
-                    <!-- パーティメンバーの簡易一覧表示 (アイコン、アイコンがない場合は名前) -->
                     <div class="flex items-center gap-2.5">
                       <div v-for="slotIdx in 5" :key="slotIdx" class="flex flex-col items-center">
                         <template v-if="party.party[slotIdx-1]">
-                          <img v-if="servants.find(s => s.id === party.party[slotIdx-1] || s.name === party.party[slotIdx-1])?.iconUrl"
+                          <img
+                            v-if="servants.find(s => s.id === party.party[slotIdx-1] || s.name === party.party[slotIdx-1])?.iconUrl"
                             :src="servants.find(s => s.id === party.party[slotIdx-1] || s.name === party.party[slotIdx-1])?.iconUrl"
-                            class="w-7 h-7 rounded-full border border-white shadow-sm object-cover" 
-                            :title="servants.find(s => s.id === party.party[slotIdx-1] || s.name === party.party[slotIdx-1])?.name"/>
-                          <span v-else class="text-[10px] font-bold text-gray-700 bg-gray-100 px-1 py-0.5 rounded truncate max-w-[50px]"
-                            :title="party.party[slotIdx-1]">
-                            {{ party.party[slotIdx-1] }}
-                          </span>
+                            class="w-7 h-7 rounded-full border border-white shadow-sm object-cover"
+                            :title="servants.find(s => s.id === party.party[slotIdx-1] || s.name === party.party[slotIdx-1])?.name" />
+                          <span v-else
+                            class="text-[10px] font-bold text-gray-700 bg-gray-100 px-1 py-0.5 rounded truncate max-w-[50px]">{{
+                            party.party[slotIdx-1] }}</span>
                         </template>
                         <span v-else class="text-[9px] font-bold text-gray-300">空</span>
                       </div>
                     </div>
                   </td>
-                  <td class="py-3.5 px-4 text-center">
-                    <span v-if="party.teapotActive" class="text-purple-600 font-bold text-xs bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">🫖 2倍</span>
-                    <span v-else class="text-gray-300 text-xs">等倍</span>
-                  </td>
+                  <td class="py-3.5 px-4 text-center"><span v-if="party.teapotActive"
+                      class="text-purple-600 font-bold text-xs bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">🫖
+                      2倍</span><span class="text-gray-300 text-xs" v-else>等倍</span></td>
                   <td class="py-3.5 px-4 text-right font-mono font-extrabold bg-blue-50/30 text-gray-800"
-                    :class="activePartyIndex === idx ? 'text-blue-700 text-base' : 'text-gray-800'">
-                    {{ calculatePartyTotalBond(party).toLocaleString() }} <span class="text-[10px] text-gray-400 font-bold">pt</span>
-                  </td>
+                    :class="activePartyIndex === idx ? 'text-blue-700 text-base' : 'text-gray-800'">{{
+                    calculatePartyTotalBond(party).toLocaleString() }} <span
+                      class="text-[10px] text-gray-400 font-bold">pt</span></td>
                   <td class="py-3.5 px-4 text-center">
                     <div class="flex justify-center gap-2">
-                      <button v-if="activePartyIndex !== idx" 
-                        @click="activePartyIndex = idx" 
-                        class="text-xs bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-md shadow-sm transition-all">
-                        この編成に切替
-                      </button>
-                      <span v-else class="text-xs text-gray-400 font-bold">-</span>
-                      
-                      <!-- 複製ボタン -->
-                      <button @click="copyParty(idx)" 
-                        class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-2.5 py-1.5 rounded-md border border-gray-300 transition-all shadow-sm"
-                        title="この編成をコピー">
-                        コピー
-                      </button>
+                      <button v-if="activePartyIndex !== idx" @click="activePartyIndex = idx"
+                        class="text-xs bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-md shadow-sm transition-all">この編成に切替</button>
+                      <span class="text-xs text-gray-400 font-bold" v-else>-</span>
+                      <button @click="copyParty(idx)"
+                        class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-2.5 py-1.5 rounded-md border border-gray-300 transition-all shadow-sm">コピー</button>
                     </div>
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <p class="text-[11px] text-gray-500 mt-3">※ 合計獲得絆P/周は、各パーティの「基礎絆P、配置ボーナス、装備している概念礼装、絆15ボーナス、その他加算、ティーポット適用有無」を動的に合算評価したものです。</p>
         </div>
       </main>
     </div>
+
+    <div v-if="activeTab === 'scheduler'"
+      class="flex-1 flex flex-col md:flex-row overflow-hidden bg-gray-50 divide-x divide-gray-200">
+
+      <div
+        class="w-full md:w-[420px] shrink-0 flex flex-col overflow-y-auto p-5 space-y-6 bg-white custom-scrollbar shadow-md z-10">
+
+        <div class="border-b border-gray-100 pb-5 space-y-4">
+          <div class="flex justify-between items-center">
+            <h3 class="text-sm font-extrabold text-gray-800 flex items-center gap-1.5">
+              <span>🚩</span> 周回クエストの選択・編集
+            </h3>
+            <button @click="addBattleTemplate"
+              class="text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded border border-blue-200">
+              ＋ クエスト新規追加
+            </button>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1">対象クエストの選択</label>
+            <div class="flex gap-2">
+              <select v-model="schedulerForm.selectedTemplateId"
+                class="flex-1 bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-sm font-semibold text-gray-800 shadow-sm cursor-pointer focus:border-blue-500">
+                <option v-for="t in battleTemplates" :key="t.id" :value="t.id">{{ t.name }} (基礎:{{ t.baseBond }})
+                </option>
+              </select>
+              <button @click="copyBattleTemplate"
+                class="text-xs font-bold text-gray-700 hover:bg-gray-100 bg-white px-2.5 py-2 border border-gray-300 rounded-md shadow-sm"
+                title="現在のクエスト設定をコピーして保存">
+                コピー(保存)
+              </button>
+              <button @click="removeBattleTemplateBySId"
+                class="text-xs font-bold text-red-600 hover:bg-red-50 px-2.5 py-2 border border-red-200 rounded-md shadow-sm"
+                title="現在のクエストを削除">
+                削除
+              </button>
+            </div>
+          </div>
+
+          <div v-if="activeSchedulerTemplate"
+            class="bg-gray-50 p-3 rounded-lg border border-gray-200 text-xs space-y-3">
+            <div class="font-bold text-gray-600 border-b border-gray-200 pb-1">▼ 選択中のクエスト詳細設定</div>
+            <div>
+              <label class="block font-bold text-gray-500 mb-0.5">クエスト名</label>
+              <input type="text" v-model="activeSchedulerTemplate.name"
+                class="w-full bg-white border border-gray-300 rounded px-2 py-1 font-medium focus:border-blue-500" />
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block font-bold text-gray-500 mb-0.5">基礎絆ポイント</label>
+                <input type="number" v-model.number="activeSchedulerTemplate.baseBond"
+                  class="w-full bg-white border border-gray-300 rounded px-2 py-1 font-mono focus:border-blue-500" />
+              </div>
+              <div>
+                <label class="block font-bold text-gray-500 mb-0.5">消費AP</label>
+                <input type="number" v-model.number="activeSchedulerTemplate.ap"
+                  class="w-full bg-white border border-gray-300 rounded px-2 py-1 font-mono focus:border-blue-500" />
+              </div>
+            </div>
+
+            <div>
+              <label class="block font-bold text-gray-500 mb-1">出撃可能クラス制限 <span
+                  class="text-[10px] font-normal text-red-500">(固定枠・自由枠すべてに厳密適用)</span></label>
+              <div class="flex flex-wrap gap-1 max-w-full">
+                <button v-for="cls in ['saber', 'archer', 'lancer', 'rider', 'caster', 'assassin', 'berserker', 'ex1', 'ex2']"
+                  :key="cls" @click="toggleTemplateClassLimit(activeSchedulerTemplate, cls)"
+                  :class="activeSchedulerTemplate.constraints.allowedClasses.includes(cls) ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'"
+                  class="px-2 py-1 border rounded text-[10px] font-bold transition-colors">
+                  {{ classOptions.find(c => c.value === cls)?.label }}
+                </button>
+              </div>
+              <p class="text-[9px] text-gray-400 mt-1">※空の場合は全クラス出撃可能とみなします</p>
+            </div>
+
+            <div class="space-y-1.5 pt-1">
+              <label class="flex items-center gap-2 font-bold text-gray-700 cursor-pointer select-none">
+                <input type="checkbox" v-model="activeSchedulerTemplate.isCrown"
+                  class="rounded border-gray-300 h-4 w-4 text-blue-600" />
+                <span>戴冠戦特別ルールを適用する</span>
+              </label>
+              <p class="text-[10px] text-gray-400 pl-6">（有効時：グランド鯖の第2礼装およびフレンド2枚持ちルールが適格になります）</p>
+
+              <label class="flex items-center gap-2 font-bold text-gray-700 cursor-pointer select-none mt-2">
+                <input type="checkbox" v-model="activeSchedulerTemplate.applyBond15Bonus"
+                  class="rounded border-gray-300 h-4 w-4 text-blue-600" />
+                <span>絆15システムバフを強制適用 (+25%)</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="border-b border-gray-100 pb-5 space-y-4">
+          <h3 class="text-sm font-extrabold text-gray-800 flex items-center gap-1.5">
+            <span>🛡️</span> 固定戦闘要員 (固定枠) の指定
+          </h3>
+          <p class="text-[11px] text-gray-500">
+            周回システムクリアに必須となる鯖を指定します。ここで固定されたスロットは、自動アサインやコストダウングレードの対象から保護されます。<br>
+            <span class="text-red-500 font-semibold">※上記クエストのクラス制限を満たす所持鯖のみが選択候補になります。</span>
+          </p>
+
+          <div class="space-y-2.5">
+            <div v-for="idx in [0, 1, 2, 3, 4]" :key="idx"
+              class="flex items-center justify-between bg-gray-50 p-2 rounded border border-gray-200">
+              <span class="text-xs font-bold text-gray-600">Slot {{ idx + 1 }} 固定指定</span>
+              <button type="button" @click="openServantPicker('scheduler', idx)"
+                class="w-64 bg-white border border-gray-300 rounded px-2 py-1 text-xs font-medium hover:bg-gray-50 focus:outline-none focus:border-blue-500 shadow-sm flex items-center justify-between transition-colors h-8">
+                <div class="flex items-center gap-1.5 truncate">
+                  <img v-if="getFixedSlotServant(idx)?.iconUrl" :src="getFixedSlotServant(idx).iconUrl" class="w-5 h-5 rounded-full border border-gray-200 object-cover" />
+                  <div v-else-if="schedulerForm.fixedSlots[idx]" class="w-5 h-5 rounded-full bg-gray-200 border border-gray-300 flex items-center justify-center text-[6px] text-gray-500">No IMG</div>
+                  <span v-if="getFixedSlotServant(idx)" class="truncate">{{ getFixedSlotServant(idx).name }}</span>
+                  <span v-else class="text-gray-400">なし (自由枠)</span>
+                </div>
+                <span class="text-gray-400 text-[10px]">▼</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="border-b border-gray-100 pb-5 space-y-4">
+          <h3 class="text-sm font-extrabold text-gray-800 flex items-center gap-1.5">
+            <span>💍</span> 固定概念礼装の指定
+          </h3>
+          <p class="text-[11px] text-gray-500">
+            自動スケジューラーが上書きしない固定装備枠です。グランド鯖の場合は2枠指定できます。
+          </p>
+
+          <div class="space-y-2.5">
+            <div v-for="idx in [0, 1, 2, 3, 4]" :key="'ce'+idx"
+              class="flex items-center justify-between bg-gray-50 p-2 rounded border border-gray-200">
+              <span class="text-xs font-bold text-gray-600">Slot {{ idx + 1 }} 礼装</span>
+              <div class="flex flex-col gap-1 w-64">
+                <select v-model="schedulerForm.fixedCEs[idx].ce1"
+                  class="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs font-medium hover:bg-gray-50 focus:outline-none focus:border-blue-500 shadow-sm transition-colors h-8">
+                  <option value="auto">自動最適化</option>
+                  <option v-for="opt in partyCEOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                </select>
+                <select v-if="isGrand(getFixedSlotServant(idx))" v-model="schedulerForm.fixedCEs[idx].ce2"
+                  class="w-full bg-blue-50 border border-blue-300 rounded px-2 py-1 text-xs font-medium text-blue-800 hover:bg-blue-100 focus:outline-none focus:border-blue-500 shadow-sm transition-colors h-8">
+                  <option value="auto">自動最適化</option>
+                  <option v-for="opt in partyCEOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                </select>
+              </div>
+            </div>
+            
+            <div class="mt-4 pt-4 border-t border-gray-200 space-y-2.5">
+              <h4 class="text-xs font-extrabold text-gray-700">🤝 サポート枠（フレンド）の固定礼装</h4>
+              <div class="flex items-center justify-between bg-purple-50 p-2 rounded border border-purple-200">
+                <span class="text-xs font-bold text-purple-700">サポート礼装 1</span>
+                <select v-model="schedulerForm.fixedSupportCEs[0]"
+                  class="w-64 bg-white border border-purple-300 rounded px-2 py-1 text-xs font-medium hover:bg-purple-50 focus:outline-none focus:border-purple-500 shadow-sm transition-colors h-8">
+                  <option value="auto">自動最適化（おまかせ）</option>
+                  <option v-for="opt in friendCEOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                </select>
+              </div>
+              <div v-if="activeSchedulerTemplate.isCrown" class="flex items-center justify-between bg-purple-50 p-2 rounded border border-purple-200">
+                <span class="text-xs font-bold text-purple-700">サポート礼装 2</span>
+                <select v-model="schedulerForm.fixedSupportCEs[1]"
+                  class="w-64 bg-white border border-purple-300 rounded px-2 py-1 text-xs font-medium hover:bg-purple-50 focus:outline-none focus:border-purple-500 shadow-sm transition-colors h-8">
+                  <option value="auto">自動最適化（おまかせ）</option>
+                  <option v-for="opt in friendCEOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="border-b border-gray-100 pb-5 space-y-4">
+          <h3 class="text-sm font-extrabold text-gray-800 flex items-center gap-1.5">
+            <span>🎒</span> 所持している絆ボーナス礼装
+          </h3>
+          <p class="text-[11px] text-gray-500">
+            在庫がある（所持している）礼装を設定してください。スケジューラーが自動選出時に優先して割り当てます。
+          </p>
+          
+          <div class="space-y-3">
+            <div>
+              <h4 class="text-xs font-extrabold text-gray-700 mb-2">主要絆礼装</h4>
+              <div class="flex flex-wrap gap-2">
+                <label class="flex items-center gap-1.5 cursor-pointer bg-white border border-gray-200 px-2 py-1.5 rounded shadow-sm hover:bg-gray-50 transition-colors">
+                  <input type="checkbox" v-model="ownedCEs.lunchtime" class="rounded text-blue-600 focus:ring-blue-500 border-gray-300" />
+                  <span class="text-[11px] font-bold text-gray-700">カルデア・ランチタイム (+10%)</span>
+                </label>
+                <label class="flex items-center gap-1.5 cursor-pointer bg-white border border-gray-200 px-2 py-1.5 rounded shadow-sm hover:bg-gray-50 transition-colors">
+                  <input type="checkbox" v-model="ownedCEs.teatime" class="rounded text-blue-600 focus:ring-blue-500 border-gray-300" />
+                  <span class="text-[11px] font-bold text-gray-700">カルデア・ティータイム (+5%)</span>
+                </label>
+                <label class="flex items-center gap-1.5 cursor-pointer bg-white border border-gray-200 px-2 py-1.5 rounded shadow-sm hover:bg-gray-50 transition-colors">
+                  <input type="checkbox" v-model="ownedCEs.portrait" class="rounded text-blue-600 focus:ring-blue-500 border-gray-300" />
+                  <span class="text-[11px] font-bold text-gray-700">英霊肖像 (+50固定)</span>
+                </label>
+                <label class="flex items-center gap-1.5 cursor-pointer bg-white border border-gray-200 px-2 py-1.5 rounded shadow-sm hover:bg-gray-50 transition-colors">
+                  <input type="checkbox" v-model="ownedCEs.kyokuten" class="rounded text-blue-600 focus:ring-blue-500 border-gray-300" />
+                  <span class="text-[11px] font-bold text-gray-700">英霊極点 (+2%)</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2 bg-gray-50 p-2 rounded border border-gray-200">
+              <span class="text-xs font-bold text-gray-700">5%系絆礼装 (英霊正装など) の所持枚数:</span>
+              <select v-model.number="ownedCEs.bond5Count" class="w-16 bg-white border border-gray-300 rounded px-2 py-1 text-xs font-bold focus:outline-none focus:border-blue-500 shadow-sm text-center">
+                <option v-for="n in 6" :key="n-1" :value="n-1">{{ n-1 }}枚</option>
+              </select>
+            </div>
+
+            <div class="pt-2 border-t border-gray-100">
+              <h4 class="text-xs font-extrabold text-gray-700 mb-2">20%特攻礼装</h4>
+              <div class="flex flex-wrap gap-2">
+                <label v-for="trait in availableTraits" :key="trait" class="flex items-center gap-1.5 cursor-pointer bg-white border border-gray-200 px-2 py-1.5 rounded shadow-sm hover:bg-gray-50 transition-colors">
+                  <input type="checkbox" :value="trait" v-model="ownedCEs.traitCEs" class="rounded text-blue-600 focus:ring-blue-500 border-gray-300" />
+                  <span class="text-[11px] font-bold text-gray-700">{{ trait }}</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+
+
+        <div class="space-y-4">
+          <h3 class="text-sm font-extrabold text-gray-800 flex items-center gap-1.5">
+            <span>🚀</span> 実行プランの最終調整
+          </h3>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-bold text-gray-500 mb-1">その他の加算 (%)</label>
+              <input type="number" v-model.number="schedulerForm.extraGlobalPercent"
+                class="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-1.5 text-xs font-mono focus:border-blue-500"
+                placeholder="0" />
+            </div>
+            <div class="flex items-center h-full pt-4">
+              <label class="flex items-center gap-2 text-xs font-bold text-purple-700 cursor-pointer select-none">
+                <input type="checkbox" v-model="schedulerForm.useTeapot"
+                  class="rounded border-gray-300 h-4 w-4 text-purple-600" />
+                <span>🫖 ティーポット (2倍)</span>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1">実行スコープモード</label>
+            <div class="inline-flex rounded-md shadow-sm w-full" role="group">
+              <button type="button" @click="schedulerForm.isMultipleMode = false"
+                :class="!schedulerForm.isMultipleMode ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                class="w-1/2 py-2 text-xs font-bold rounded-l-md transition-colors">単一クエスト完結</button>
+              <button type="button" @click="schedulerForm.isMultipleMode = true"
+                :class="schedulerForm.isMultipleMode ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                class="w-1/2 py-2 text-xs font-bold rounded-r-md transition-colors border-l border-indigo-400">複数フェーズ(拡張土台)</button>
+            </div>
+            <p v-if="schedulerForm.isMultipleMode" class="text-[10px] text-amber-600 mt-1 font-bold">
+              ※複数選択は土台モードです。選択した単一テンプレートを基点に高機能シミュレーションを回します。</p>
+          </div>
+
+          <button @click="runAdvancedScheduler"
+            class="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-md transition-all transform hover:scale-[1.01] text-sm flex items-center justify-center gap-2">
+            <span>🚀</span> 最適周回ロードマップを自動生成
+          </button>
+        </div>
+
+      </div>
+
+      <div class="flex-1 flex flex-col overflow-y-auto p-6 custom-scrollbar bg-gray-50">
+
+        <div id="schedule-chart-container" v-if="advancedScheduleResults" class="w-full max-w-5xl mx-auto space-y-6 p-2">
+          <div class="flex justify-between items-center bg-white p-4 border border-gray-200 rounded-xl shadow-xs" data-html2canvas-ignore>
+            <div>
+              <h2 class="text-lg font-extrabold text-gray-800 flex items-center gap-1.5">
+                <span>📋</span> 貪欲法最適化シミュレーション チャート
+              </h2>
+              <p class="text-xs text-gray-500 mt-0.5">制約条件を完全に遵守し、目標絆達成までの最小周回数をシミュレートした結果です。</p>
+            </div>
+            <div class="flex items-center gap-3">
+              <div
+                class="bg-indigo-50 border border-indigo-100 text-indigo-900 font-black px-5 py-2.5 rounded-xl text-sm shadow-xs">
+                総周回数: <span class="text-2xl font-mono text-indigo-600 ml-1">{{
+                  advancedScheduleResults.totalRuns.toLocaleString() }}</span> 周
+              </div>
+              <button @click="saveCurrentSchedule"
+                class="px-4 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold transition-all shadow-xs">
+                💾 履歴に保存
+              </button>
+              <button @click="advancedScheduleResults = null"
+                class="px-3 py-2.5 bg-white hover:bg-red-50 text-red-600 border border-gray-300 rounded-lg text-xs font-bold transition-all shadow-xs"
+                title="チャートをクリア">
+                🗑️ クリア
+              </button>
+              <button @click="exportScheduleJSON"
+                class="px-4 py-2.5 bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 rounded-lg text-xs font-bold transition-all shadow-xs">
+                📥 JSONエクスポート
+              </button>
+              <button @click="exportScheduleImage"
+                class="px-4 py-2.5 bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold transition-all shadow-xs">
+                🖼️ 画像として保存
+              </button>
+            </div>
+          </div>
+
+          <!-- レベルアップ実績サマリー -->
+          <div v-if="advancedScheduleResults.levelUpSummary && advancedScheduleResults.levelUpSummary.length > 0" 
+               class="bg-white border border-green-200 rounded-xl p-5 shadow-sm">
+            <h3 class="text-sm font-extrabold text-green-800 flex items-center gap-1.5 mb-3">
+              <span>📈</span> 絆レベルアップ実績 (最終Lv降順)
+            </h3>
+            <div class="flex flex-wrap gap-2">
+              <div v-for="(lvup, idx) in advancedScheduleResults.levelUpSummary" :key="idx"
+                class="flex items-center gap-2 bg-green-50 border border-green-100 px-3 py-1.5 rounded-lg shadow-sm">
+                <span class="text-xs font-bold text-gray-800">{{ lvup.name }}</span>
+                <span class="text-xs text-gray-400">|</span>
+                <span class="text-xs font-mono font-bold text-gray-500">Lv{{ lvup.oldLv }}</span>
+                <span class="text-xs text-green-500 font-black">➔</span>
+                <span class="text-xs font-mono font-extrabold text-green-700">Lv{{ lvup.newLv }}</span>
+              </div>
+            </div>
+          </div>
+
+        <div v-if="savedSchedules && savedSchedules.length > 0" class="w-full max-w-5xl mx-auto mt-4 bg-white border border-gray-200 rounded-xl p-6 shadow-sm mb-6">
+          <h3 class="text-lg font-extrabold text-gray-800 flex items-center gap-2 mb-4">
+            <span class="text-blue-500">📁</span> 保存されたスケジュール履歴
+          </h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse min-w-max">
+              <thead>
+                <tr class="border-b border-gray-200 text-xs font-bold text-gray-400 uppercase bg-gray-50">
+                  <th class="py-3 px-4 w-48">履歴名</th>
+                  <th class="py-3 px-4 text-center w-24">フェーズ数</th>
+                  <th class="py-3 px-4 text-center bg-indigo-50 text-indigo-800 font-extrabold rounded-t w-32">総周回数</th>
+                  <th class="py-3 px-4">条件サマリー</th>
+                  <th class="py-3 px-4 text-center w-32">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100 text-sm">
+                <template v-for="(hist, idx) in savedSchedules" :key="hist.id">
+                  <tr class="hover:bg-gray-50 transition-colors">
+                    <td class="py-3 px-4 cursor-pointer group" @click="openedScheduleId = openedScheduleId === hist.id ? null : hist.id">
+                      <div class="flex flex-col">
+                        <span class="text-gray-800 font-bold text-sm group-hover:text-blue-600 group-hover:underline transition-colors flex items-center gap-1">
+                          <span class="text-xs">{{ openedScheduleId === hist.id ? '▼' : '▶' }}</span>
+                          {{ hist.name }}
+                        </span>
+                        <span class="text-[10px] text-gray-400 mt-0.5">{{ hist.timestamp }}</span>
+                      </div>
+                    </td>
+                    <td class="py-3 px-4 text-center text-gray-600 font-mono">
+                      {{ hist.totalPhases }}
+                    </td>
+                    <td class="py-3 px-4 text-center font-mono font-black text-indigo-700 bg-indigo-50/30 text-lg">
+                      {{ hist.totalRuns.toLocaleString() }}
+                    </td>
+                    <td class="py-3 px-4">
+                      <span class="text-[11px] font-bold text-gray-600 bg-gray-100 px-2 py-1 rounded border border-gray-200">
+                        {{ hist.conditionSummary }}
+                      </span>
+                    </td>
+                    <td class="py-3 px-4 text-center">
+                      <div class="flex flex-col items-center gap-1.5">
+                        <div class="flex justify-center gap-2">
+                          <button @click.stop="loadScheduleHistory(idx)"
+                            class="text-[11px] bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-2.5 py-1 rounded shadow-sm transition-all">復元</button>
+                          <button @click.stop="deleteScheduleHistory(idx)"
+                            class="text-[11px] bg-red-50 hover:bg-red-100 text-red-600 font-bold px-2.5 py-1 rounded border border-red-200 transition-all shadow-sm">削除</button>
+                        </div>
+                        <button @click.stop="renameScheduleHistory(idx)"
+                          class="text-[11px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 px-2 py-0.5 rounded transition-colors w-full border border-transparent hover:border-gray-200">
+                          ✏️ 名前変更
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  
+                  <tr v-if="openedScheduleId === hist.id" class="bg-gray-50/80">
+                    <td colspan="5" class="px-6 py-4 border-b border-gray-200 shadow-inner">
+                      <div class="bg-white border border-gray-200 rounded-lg p-4 pl-5 text-sm">
+                        <h4 class="font-bold text-gray-700 mb-2 flex items-center gap-1.5"><span class="text-blue-500">⚙️</span> 詳細な実行条件</h4>
+                        <div class="grid grid-cols-2 gap-x-8 gap-y-3 text-xs text-gray-600">
+                          <div>
+                            <span class="font-bold text-gray-500 block mb-1">固定枠 (Slot 1〜5)</span>
+                            <div class="flex flex-wrap gap-1">
+                              <span v-for="(name, sIdx) in hist.detailedConditions.fixedSlots" :key="'fs'+sIdx" class="bg-gray-100 border border-gray-200 px-2 py-0.5 rounded text-gray-700">
+                                <span class="text-gray-400 mr-1">{{sIdx+1}}:</span>{{ name ? name : '自由枠' }}
+                              </span>
+                            </div>
+                          </div>
+                          <div>
+                            <span class="font-bold text-gray-500 block mb-1">サポート固定礼装</span>
+                            <div class="flex gap-2">
+                              <span v-for="(ce, cIdx) in hist.detailedConditions.fixedSupportCEs" :key="'fsce'+cIdx" class="bg-purple-50 border border-purple-100 text-purple-700 px-2 py-0.5 rounded">
+                                {{ formatCEName(ce) || '自動(おまかせ)' }}
+                              </span>
+                            </div>
+                          </div>
+                          <div>
+                            <span class="font-bold text-gray-500 block mb-1">自陣 固定礼装</span>
+                            <div class="flex flex-wrap gap-1">
+                              <template v-for="(ceObj, cIdx) in hist.detailedConditions.fixedCEs" :key="'fc'+cIdx">
+                                <span v-if="ceObj.ce1 !== 'none' || ceObj.ce2 !== 'none'" class="bg-gray-100 border border-gray-200 px-2 py-0.5 rounded text-gray-700">
+                                  <span class="text-gray-400 mr-1">{{cIdx+1}}:</span>
+                                  {{ ceObj.ce1 !== 'none' ? formatCEName(ceObj.ce1) : 'なし' }}
+                                  <span v-if="ceObj.ce2 !== 'none'" class="text-blue-500"> / {{ formatCEName(ceObj.ce2) }}</span>
+                                </span>
+                              </template>
+                              <span v-if="hist.detailedConditions.fixedCEs.every(c => c.ce1 === 'none' && c.ce2 === 'none')" class="text-gray-400">指定なし</span>
+                            </div>
+                          </div>
+                          <div>
+                            <span class="font-bold text-gray-500 block mb-1">特別ルール・設定</span>
+                            <div class="flex flex-wrap gap-2">
+                              <span v-if="hist.detailedConditions.isCrown" class="bg-yellow-50 text-yellow-700 border border-yellow-200 px-2 py-0.5 rounded font-bold">👑 戴冠戦ルール適用</span>
+                              <span v-if="hist.detailedConditions.useTeapot" class="bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded font-bold">🫖 ティーポット使用</span>
+                              <span v-if="hist.detailedConditions.extraGlobalPercent > 0" class="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded font-bold">追加ボーナス: +{{hist.detailedConditions.extraGlobalPercent}}%</span>
+                              <span v-if="!hist.detailedConditions.isCrown && !hist.detailedConditions.useTeapot && hist.detailedConditions.extraGlobalPercent === 0" class="text-gray-400">特になし</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+          <div class="space-y-6 relative pl-8 pb-12">
+            <div class="timeline-line"></div>
+
+            <div v-for="(phase, pIdx) in advancedScheduleResults.phases" :key="pIdx"
+              class="relative bg-white hover:bg-slate-50 border border-gray-200 rounded-xl p-5 transition-all duration-200 shadow-sm">
+              <div
+                class="absolute -left-[23px] top-6 w-4 h-4 rounded-full bg-indigo-600 border-4 border-white shadow-sm z-10">
+              </div>
+
+              <div class="flex justify-between items-start mb-4">
+                <div>
+                  <span class="text-xs bg-indigo-600 text-white font-extrabold px-2 py-0.5 rounded mr-2">Phase {{ pIdx +
+                    1 }}</span>
+                  <span class="font-bold text-gray-800 text-base">{{ phase.questName }}</span>
+                  <div class="mt-2 text-xs font-bold text-gray-500 flex flex-wrap gap-2 items-center">
+                    <span class="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded border border-gray-200">
+                      <span>🤝</span> サポート({{ phase.optimizedFriendPosition === 'front' ? '前衛' : '後衛' }}): {{ phase.optimizedFriendCEs && phase.optimizedFriendCEs.length > 0 ? phase.optimizedFriendCEs.map(ce => formatCEName(ce, true)).join(' / ') : 'なし' }}
+                    </span>
+                    <span v-if="phase.totalGainedPerRun" class="flex items-center gap-1 bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded border border-indigo-200 font-extrabold shadow-xs">
+                      <span>📈</span> 編成合計: +{{ phase.totalGainedPerRun.toLocaleString() }} pt/周
+                    </span>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <span class="text-xl font-mono font-extrabold text-gray-900">{{ phase.runs }}</span> <span
+                    class="text-xs text-gray-500 font-bold">周</span>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-5 gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <div v-for="(node, nIdx) in phase.party" :key="nIdx"
+                  class="flex flex-col items-center text-center p-2 rounded border border-dashed relative"
+                  :class="node.isGrand ? 'bg-blue-50/70 border-blue-300' : 'bg-white border-gray-200'">
+
+                  <span v-if="node.isGrand"
+                    class="absolute -top-2 left-2 text-[8px] bg-blue-600 text-white px-1 rounded font-extrabold scale-90">Grand</span>
+
+                  <div class="flex items-center gap-1.5 w-full justify-center mb-1">
+                    <img v-if="node.iconUrl" :src="node.iconUrl" class="w-6 h-6 rounded-full border object-cover" />
+                    <span class="text-xs font-bold text-gray-700 truncate max-w-[90px]" :title="node.name">{{ node.name
+                      || '未配置(空)' }}</span>
+                  </div>
+
+                  <!-- 保有特性表示 -->
+                  <div v-if="node.name && node.traits && node.traits.length > 0" class="flex flex-wrap gap-0.5 justify-center w-full mb-1">
+                    <span v-for="t in node.traits" :key="t"
+                      class="px-1 py-0.2 text-[8px] font-bold bg-gray-100 text-gray-500 rounded border border-gray-200 leading-none scale-90">
+                      {{ t }}
+                    </span>
+                  </div>
+
+                  <div class="flex flex-col gap-0.5 w-full mt-1">
+                    <div v-for="(ce, i) in (node.ceName ? node.ceName.split(' / ') : [])" :key="i"
+                      class="text-[9px] text-gray-700 font-bold truncate w-full px-1 bg-white rounded border border-gray-200 py-0.5 shadow-sm"
+                      :title="ce">
+                      <span v-if="node.isGrand && node.ceName.includes(' / ')" class="text-blue-600 mr-0.5">{{ i === 0 ? '①' : '②' }}</span>
+                      {{ ce }}
+                    </div>
+                  </div>
+
+                  <div
+                    class="document-pts mt-2 text-[10px] w-full text-left border-t border-gray-100 pt-1 space-y-0.5 font-mono">
+                    <div class="flex justify-between text-gray-500">
+                      <span>獲得/周:</span><span class="font-bold text-gray-700">+{{ node.gainedPerRun }}</span>
+                    </div>
+                    <div class="flex justify-between text-gray-500">
+                      <span>Lv推移:</span><span class="font-bold text-gray-600">{{ node.phaseStartLv }} <span class="text-green-500 px-0.5">➔</span> <span :class="node.phaseEndLv > node.phaseStartLv ? 'text-green-600 font-extrabold' : ''">{{ node.phaseEndLv }}</span></span>
+                    </div>
+                    <div class="flex justify-between text-gray-500">
+                      <span>目標まであと:</span><span :class="node.totalRemP === 0 ? 'text-green-500 font-bold' : ''">{{ node.totalRemP > 0 ? node.totalRemP.toLocaleString() + ' pt' : '達成済' }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="phase.completedServants && phase.completedServants.length > 0"
+                class="mt-3 flex flex-wrap gap-2 items-center bg-green-50 border border-green-200 px-3 py-2 rounded-lg">
+                <span class="text-xs font-extrabold text-green-700 flex items-center gap-1">🎉 目標絆Lv到達
+                  (このフェーズで卒業):</span>
+                <span v-for="name in phase.completedServants" :key="name"
+                  class="text-xs bg-green-600 text-white font-bold px-2.5 py-0.5 rounded shadow-xs">
+                  {{ name }}
+                </span>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <div v-if="!advancedScheduleResults" class="flex-1 flex flex-col items-center justify-center text-center p-12 text-gray-400">
+          <div class="text-5xl mb-3">📋</div>
+          <p class="font-bold text-sm">条件を指定してスケジュールを生成してください</p>
+          <p class="text-xs max-w-sm mt-1">左パネルで周回するクエストと、戦闘に固定するサーヴァントを設定し、「自動生成」ボタンを押すとここに最適化されたロードマップが描かれます。</p>
+        </div>
+
+
+      </div>
+
+    </div>
+
+    <!-- Servant Picker Modal -->
+    <div v-if="servantPicker.isOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" @click.self="closeServantPicker">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50">
+          <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+            <span>🔍</span> サーヴァント選択
+          </h3>
+          <button @click="closeServantPicker" class="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-full hover:bg-gray-200">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+
+        <!-- Modal Toolbar -->
+        <div class="p-4 border-b border-gray-100 space-y-3 bg-white">
+          <div class="flex items-center gap-3">
+            <div class="relative flex-1">
+              <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">🔍</span>
+              <input type="text" v-model="servantPicker.search" placeholder="サーヴァント名で検索..." class="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all">
+            </div>
+            <button @click="selectServantInPicker(null)" class="px-4 py-2 bg-red-50 text-red-600 font-bold text-sm rounded-lg border border-red-200 hover:bg-red-100 transition-colors shadow-sm flex items-center gap-1.5 shrink-0">
+              <span>✖</span> 未選択にする
+            </button>
+          </div>
+
+          <div class="flex flex-wrap gap-1">
+            <button @click="servantPicker.classFilter = 'all'" :class="servantPicker.classFilter === 'all' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'" class="px-3 py-1.5 rounded-md text-xs font-bold transition-colors">ALL</button>
+            <button v-for="cls in classOptions" :key="cls.value" @click="servantPicker.classFilter = cls.value" :class="servantPicker.classFilter === cls.value ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'" class="px-3 py-1.5 rounded-md text-xs font-bold transition-colors">
+              {{ cls.label }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Modal Body (Grid) -->
+        <div class="flex-1 overflow-y-auto p-4 custom-scrollbar bg-slate-50">
+          <div v-if="getServantPickerList.length === 0" class="flex flex-col items-center justify-center h-40 text-gray-400">
+            <span class="text-3xl mb-2">🤔</span>
+            <p class="text-sm font-bold">該当するサーヴァントがいません</p>
+          </div>
+          <div v-else class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+            <button v-for="svt in getServantPickerList" :key="svt.id" @click="selectServantInPicker(svt.id)" class="group bg-white border border-gray-200 rounded-xl p-2.5 flex flex-col items-center text-center hover:border-blue-400 hover:shadow-md transition-all hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500 relative">
+              <div class="relative mb-2">
+                <img v-if="svt.iconUrl" :src="svt.iconUrl" class="w-14 h-14 rounded-full border-2 border-gray-100 object-cover group-hover:border-blue-200 transition-colors" />
+                <div v-else class="w-14 h-14 rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center text-[10px] text-gray-400">No IMG</div>
+                <span class="absolute -bottom-1 -right-1 bg-gray-800 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm border border-gray-600">★{{ svt.rarity }}</span>
+              </div>
+              <span class="text-[10px] font-bold text-gray-700 leading-tight line-clamp-2 w-full">{{ svt.name }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script src="bondReqs.js"></script>
+  <script src="greedyScheduler.js"></script>
   <script src="app.js"></script>
 </body>
 
