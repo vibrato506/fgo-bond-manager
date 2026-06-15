@@ -1,0 +1,34 @@
+# イベント用設定ファイル (AIによって自動生成・更新されます)
+
+quests:
+  quest_main:
+    title: "リザルト: 最高効率クエスト"
+    base_drop: 3
+    timber_boxes: 3.0 # 副産物ドロップ枠数 (副産物がない場合は0に設定)
+    boxes:
+      gold: 9
+      silver: 9
+      copper: 9
+
+materials:
+  gold:
+    name: "金素材"
+    owned: 0
+    needed: 0
+    boxes: 9
+    bonus_normal: 0
+    bonus_limit: 0
+  silver:
+    name: "銀素材"
+    owned: 0
+    needed: 0
+    boxes: 9
+    bonus_normal: 0
+    bonus_limit: 0
+  copper:
+    name: "銅素材"
+    owned: 0
+    needed: 0
+    boxes: 9
+    bonus_normal: 0
+    bonus_limit: 0
