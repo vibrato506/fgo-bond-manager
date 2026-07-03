@@ -1,0 +1,83 @@
+# ゲーム効率計算 設定ファイル (event4 雀のお宿版)
+
+quests:
+  90pp:
+    title: "リザルト1: 90++のみで周回した場合"
+    base_drop: 3
+    timber_boxes: 5.1
+    boxes:
+      gold: 11.6
+      silver: 11.5
+      copper: 11.2
+  90p:
+    title: "リザルト2: 90+のみで周回した場合"
+    base_drop: 3
+    timber_boxes: 4.2
+    boxes:
+      gold: 9.0
+      silver: 9.5
+      copper: 9.5
+
+# ---------------------------------------------------------
+# 素材設定 (Material Settings)
+# ---------------------------------------------------------
+materials:
+  gold:
+    name: "雀の幸 (金素材)"
+    owned: 3841       # 現在の所持数（※後ほど更新してください）
+    needed: 3900   # 必要数
+    bonus_normal: 1
+    bonus_evolved: 2
+  silver:
+    name: "川の幸 (銀素材)"
+    owned: 3344       # 現在の所持数（※後ほど更新してください）
+    needed: 3450   # 必要数
+    bonus_normal: 1
+    bonus_evolved: 2
+  copper:
+    name: "山の幸 (銅素材)"
+    owned: 3841       # 現在の所持数（※後ほど更新してください）
+    needed: 3550   # 必要数
+    bonus_normal: 1
+    bonus_evolved: 2
+
+# ---------------------------------------------------------
+# 前提条件 (Preconditions)
+# ---------------------------------------------------------
+preconditions:
+  # 自由枠として使いたい数
+  reserved_slots: 0
+
+  # 必ず装備するイベント礼装
+  must_equip:
+    point: 0
+
+  # 絆礼装のおおよその編成可能数
+  max_bond_equips: 5
+
+# ---------------------------------------------------------
+# 装備・編成設定 (Loadout Settings)
+# ---------------------------------------------------------
+# 合計所持数 (Inventory)
+loadout:
+  self:
+    gold:   {normal: 0, evolved: 0} # 星5礼装
+    silver: {normal: 1, evolved: 0} # 星4礼装
+    copper: {normal: 2, evolved: 1} # 星3礼装: 無凸2枚、凸1枚
+    # 配布礼装（木材増加）は今回考慮外のため記載していません
+
+  friend:
+    type: "auto"   # auto, gold, silver, copper, none
+    evolved: true
+
+# ---------------------------------------------------------
+# 出力設定 (Output Settings)
+# ---------------------------------------------------------
+output:
+  group_by_stage: false
+
+# ---------------------------------------------------------
+# ステージ設定 (Stage Settings)
+# ---------------------------------------------------------
+stage:
+  base_drop: 3       # 1枠あたりの基礎ドロップ数（クエスト情報が分かり次第入力）

@@ -1,0 +1,61 @@
+# ゲーム効率計算 設定ファイル (イベント2用: 6種素材 + コン共通ボーナス版)
+
+# ---------------------------------------------------------
+# 素材設定 (Material Settings)
+# ---------------------------------------------------------
+materials:
+  gold:
+    name: "金素材"
+    owned: 4466
+    needed: 4500
+    boxes: 11.5
+    bonus_normal: 1
+    bonus_evolved:  2
+  silver:
+    name: "銀素材"
+    owned: 3525
+    needed: 3550
+    boxes: 11.2
+    bonus_normal: 1
+    bonus_evolved: 2
+  copper:
+    name: "銅素材"
+    owned: 3870
+    needed: 3850
+    boxes: 10.8
+    bonus_normal: 1
+    bonus_evolved: 2
+# ---------------------------------------------------------
+# 前提条件 (Preconditions)
+# ---------------------------------------------------------
+preconditions:
+  reserved_slots: 1
+  max_bond_equips: 5
+
+# ---------------------------------------------------------
+# 装備・編成設定 (Loadout Settings)
+# ---------------------------------------------------------
+# 合計所持数 (Inventory)
+loadout:
+  # 自前所持数 (Inventory) - ここに所持している全ての礼装数を入力してください
+  # スクリプトが自動的に最適な5枚を選んで計算します
+  self:
+    gold:   {normal: 2, evolved: 0}
+    silver: {normal: 1, evolved: 0}
+    copper: {normal: 1, evolved: 1}
+
+  friend:
+    type: "auto"   # auto, gold, silver, copper, none
+    evolved: true
+
+# ---------------------------------------------------------
+# 出力設定 (Output Settings)
+# ---------------------------------------------------------
+output:
+  group_by_stage: false
+
+# ---------------------------------------------------------
+# ステージ設定 (Stage Settings)
+# ---------------------------------------------------------
+stage:
+  base_drop: 3       # 1枠あたりの基礎ドロップ数
